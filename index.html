@@ -137,6 +137,15 @@ input::placeholder{color:var(--muted);opacity:.8}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .field{display:flex;flex-direction:column;gap:6px}
 .hist{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sug{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--accent);border-radius:10px;overflow:hidden;margin-top:-2px}
+.sug[hidden]{display:none}
+.sug .sug-h{font-size:12px;color:var(--muted);padding:8px 12px 4px}
+.sug button{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px;border-top:1px dashed var(--line);cursor:pointer}
+.sug button:hover{background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.sug button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.sug .n{font-weight:600;overflow-wrap:anywhere}
+.sug .n small{font-weight:400;color:var(--muted)}
+.sug .v{font-family:var(--f-mono);font-size:13px;color:var(--muted);white-space:nowrap}
 .row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;cursor:pointer;min-width:0}
 .row-edit:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:6px}
 h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
@@ -476,7 +485,7 @@ function openAdd(prefill, ean){
       <div class="field"><label for="fEan">Código de barras (opcional)</label>
         <div class="ean-row"><input id="fEan" inputmode="numeric" placeholder="7891234567890" autocomplete="off" value="${esc(ean||'')}"><button class="btn" type="button" data-scan-form>Ler</button></div>
         <p id="fLookup" class="count" style="margin:0" aria-live="polite"></p></div>
-      <div class="field"><label for="fName">Produto</label><input id="fName" placeholder="Ex.: Arroz tipo 1, Dipirona, Ração" autocomplete="off" value="${esc(prefill||'')}"></div>
+      <div class="field"><label for="fName">Produto</label><input id="fName" placeholder="Ex.: Arroz tipo 1, Dipirona, Ração" autocomplete="off" value="${esc(prefill||'')}"><div id="fNameSug" class="sug" hidden></div></div>
       <div class="field"><label for="fUnit">Tamanho / unidade (opcional)</label><input id="fUnit" placeholder="Ex.: 5 kg, lata 350 ml" autocomplete="off"></div>
       <div class="field"><label for="fPrice">Preço pago</label><div class="money"><span>R$</span><input id="fPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div></div>
       <div class="field"><label for="fStore">Onde</label>
@@ -489,6 +498,7 @@ function openAdd(prefill, ean){
   showSheet();
   if(ean){ const ex=findByEan(ean); if(ex) $('#fErr').textContent=`Esse código já é de “${ex.name}”.`; else autofill(ean); }
   setTimeout(()=>{ const i=$('#fName'); if(i) i.focus(); }, 50);
+  renderNameSug();
 }
 
 /* ---------- Busca do nome pelo código (bases públicas Open Food Facts) ---------- */
@@ -898,6 +908,38 @@ function saveEditEntry(){
   openDetail(p.id);
 }
 
+
+/* ---------- Sugestão de produtos já cadastrados ao digitar o nome ---------- */
+const normP = x => String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+function renderNameSug(){
+  const box = $('#fNameSug'), inp = $('#fName'); if(!box || !inp) return;
+  const q = normP(inp.value);
+  if(q.length < 2){ box.hidden = true; box.innerHTML = ''; return; }
+  const words = q.split(/\s+/);
+  const hits = [...items.values()].map(p => {
+    const hay = normP([p.name, p.unit, p.ean].filter(Boolean).join(' '));
+    if(!words.every(w => hay.includes(w))) return null;
+    const n = normP(p.name);
+    return {p, score: n===q ? 0 : n.startsWith(q) ? 1 : 2};
+  }).filter(Boolean).sort((a,b)=> a.score-b.score || (a.p.name||'').localeCompare(b.p.name||'','pt-BR')).slice(0,5);
+  if(!hits.length){ box.hidden = true; box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="sug-h">Já cadastrados: toque para usar</div>' + hits.map(({p}) => {
+    const h = hist(p), last = h[h.length-1];
+    return `<button type="button" data-pick-prod="${esc(p.id)}"><span class="n">${esc(p.name)}${p.unit?` <small>${esc(p.unit)}</small>`:''}</span><span class="v">${last?fmt(last.p):''}</span></button>`;
+  }).join('');
+  box.hidden = false;
+}
+function pickExisting(id){
+  const price = $('#fPrice') ? $('#fPrice').value : '', store = $('#fStore') ? $('#fStore').value : '', date = $('#fDate') ? $('#fDate').value : '';
+  openDetail(id);
+  if(price && $('#cmpPrice')){ $('#cmpPrice').value = price; }
+  if(store && $('#cmpStore')){ $('#cmpStore').value = store; }
+  if(date && $('#cmpDate')){ $('#cmpDate').value = date; }
+  renderCmp();
+  toast('Produto já cadastrado: registre a compra aqui');
+}
+document.addEventListener('input', ev => { if(ev.target.id==='fName') renderNameSug(); });
+
 /* ---------- Folha: abrir/fechar ---------- */
 let lastFocus = null;
 function showSheet(){ lastFocus = document.activeElement; $('#overlay').hidden = false; document.body.style.overflow='hidden'; }
@@ -914,6 +956,7 @@ document.addEventListener('click', ev=>{
   if(t.closest('[data-close]') || t === $('#overlay')){ closeSheet(); return; }
   const s = t.closest('[data-sort]');
   if(s){ sortBy = s.dataset.sort; document.querySelectorAll('[data-sort]').forEach(b=>b.setAttribute('aria-pressed', b===s?'true':'false')); renderList(); return; }
+  const pp = t.closest('[data-pick-prod]'); if(pp){ pickExisting(pp.dataset.pickProd); return; }
   if(t.closest('[data-edit-prod]')){ openEditProduct(); return; }
   const ee = t.closest('[data-edit-entry]'); if(ee){ openEditEntry(+ee.dataset.editEntry); return; }
   if(t.closest('[data-back]')){ openDetail(openId); return; }
