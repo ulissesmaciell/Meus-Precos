@@ -206,7 +206,8 @@ input::placeholder{color:var(--muted);opacity:.8}
 const $ = s => document.querySelector(s);
 const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const PCT = new Intl.NumberFormat('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
-const fmt = v => BRL.format(v);
+const BRL3 = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:3});
+const fmt = v => (Math.round(v*1000) % 10 ? BRL3 : BRL).format(v);
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today = () => { const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
 const fdate = s => { if(!s) return ''; const [y,m,d]=s.split('-'); return `${d}/${m}/${y.slice(2)}`; };
@@ -215,14 +216,14 @@ function parsePrice(s){
   s = String(s||'').replace(/[R$\s]/g,'');
   if(s.includes(',')) s = s.replace(/\./g,'').replace(',','.');
   const v = parseFloat(s);
-  return isFinite(v) && v > 0 ? Math.round(v*100)/100 : null;
+  return isFinite(v) && v > 0 ? Math.round(v*1000)/1000 : null;
 }
 function hist(p){
   return (p.entries||[]).map((e,i)=>({...e,_i:i}))
     .sort((a,b)=> a.d<b.d?-1 : a.d>b.d?1 : a._i-b._i);
 }
 function delta(cur, prev){
-  const diff = Math.round((cur-prev)*100)/100;
+  const diff = Math.round((cur-prev)*1000)/1000;
   const pct = prev ? diff/prev*100 : 0;
   return {diff, pct, dir: Math.abs(diff) < 0.005 ? 'same' : diff > 0 ? 'up' : 'down'};
 }
@@ -330,7 +331,7 @@ function renderList(){
     const ex = {id:'ex',name:'Café torrado 500 g',unit:'pacote',entries:[{p:17.9,d:'2026-10-03',s:'Mercadinho'},{p:19.49,d:'2026-11-07',s:'Mercadinho'}]};
     el.innerHTML = `<div class="empty">
       <h2>Comece pelo que você compra sempre</h2>
-      <p>Cadastre o produto com o preço que pagou. Na próxima compra, abra ele, digite o preço da prateleira e veja na hora se subiu ou caiu.</p>
+      <p>Mercado, farmácia, posto, pet shop, loja de construção: cadastre qualquer produto com o preço que pagou. Na próxima compra, abra ele, digite o preço de hoje e veja na hora se subiu ou caiu.</p>
       <div class="example"><span class="tag">Exemplo</span>${cardHTML(ex,true)}</div>
       <button class="btn primary wide" type="button" data-add>Cadastrar primeiro produto</button>
     </div>`;
@@ -389,11 +390,11 @@ function openDetail(id){
     </div>
     <div id="dStats" class="stats"></div>
     <section class="slip" aria-label="Comparar com o preço de hoje">
-      <label for="cmpPrice">Preço de hoje na prateleira</label>
+      <label for="cmpPrice">Preço de hoje</label>
       <div class="money"><span>R$</span><input id="cmpPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div>
       <div id="cmpOut" class="cmp"></div>
-      <div class="field"><label for="cmpStore">Mercado</label>
-        <div class="ean-row"><input id="cmpStore" placeholder="Onde?" autocomplete="off"><button class="btn" type="button" data-near="cmpStore">📍 Perto</button></div>
+      <div class="field"><label for="cmpStore">Onde</label>
+        <div class="ean-row"><input id="cmpStore" placeholder="Loja, restaurante, posto…" autocomplete="off"><button class="btn" type="button" data-near="cmpStore">📍 Perto</button></div>
         <div class="near" data-near-out="cmpStore" aria-live="polite"></div></div>
       <div class="field"><label for="cmpDate">Data</label><input id="cmpDate" type="date"></div>
       <p id="cmpErr" class="err"></p>
@@ -469,11 +470,11 @@ function openAdd(prefill, ean){
       <div class="field"><label for="fEan">Código de barras (opcional)</label>
         <div class="ean-row"><input id="fEan" inputmode="numeric" placeholder="7891234567890" autocomplete="off" value="${esc(ean||'')}"><button class="btn" type="button" data-scan-form>Ler</button></div>
         <p id="fLookup" class="count" style="margin:0" aria-live="polite"></p></div>
-      <div class="field"><label for="fName">Produto</label><input id="fName" placeholder="Ex.: Arroz tipo 1" autocomplete="off" value="${esc(prefill||'')}"></div>
+      <div class="field"><label for="fName">Produto</label><input id="fName" placeholder="Ex.: Arroz tipo 1, Dipirona, Ração" autocomplete="off" value="${esc(prefill||'')}"></div>
       <div class="field"><label for="fUnit">Tamanho / unidade (opcional)</label><input id="fUnit" placeholder="Ex.: 5 kg, lata 350 ml" autocomplete="off"></div>
       <div class="field"><label for="fPrice">Preço pago</label><div class="money"><span>R$</span><input id="fPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div></div>
-      <div class="field"><label for="fStore">Mercado</label>
-        <div class="ean-row"><input id="fStore" placeholder="Onde?" autocomplete="off" value="${esc(tripStore())}"><button class="btn" type="button" data-near="fStore">📍 Perto</button></div>
+      <div class="field"><label for="fStore">Onde</label>
+        <div class="ean-row"><input id="fStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(tripStore())}"><button class="btn" type="button" data-near="fStore">📍 Perto</button></div>
         <div class="near" data-near-out="fStore" aria-live="polite"></div></div>
       <div class="field"><label for="fDate">Data</label><input id="fDate" type="date" value="${today()}"></div>
       <p id="fErr" class="err"></p>
@@ -662,7 +663,7 @@ function onCode(code){
   else { openAdd('', code); toast('Código novo'); }
 }
 
-/* ---------- Mercado pela localização (OpenStreetMap) ---------- */
+/* ---------- Loja pela localização (OpenStreetMap) ---------- */
 const TRIP_KEY = 'meusprecos.trip', TRIP_MS = 90*60*1000;
 function tripStore(){
   try{ const t = JSON.parse(localStorage.getItem(TRIP_KEY)||'null'); if(t && t.s && Date.now()-t.t < TRIP_MS) return t.s; }catch(e){}
@@ -683,52 +684,77 @@ function timedFetch(url, ms){
   return fetch(url, {signal:ctl.signal}).then(r=>{ clearTimeout(t); if(!r.ok) throw {code:'http', status:r.status}; return r.json(); },
     e=>{ clearTimeout(t); throw {code: e && e.name==='AbortError' ? 'timeout' : 'fetch'}; });
 }
-function addPlace(out, seen, lat, lon, name, la, lo, maxD){
+const SHOP_PT = {supermarket:'supermercado',convenience:'conveniência',wholesale:'atacado',greengrocer:'hortifrúti',butcher:'açougue',bakery:'padaria',
+  department_store:'loja de departamento',general:'mercadinho',mall:'shopping',pharmacy:'farmácia',chemist:'farmácia/perfumaria',fuel:'posto',
+  hardware:'ferragens',doityourself:'material de construção',trade:'material de construção',paint:'tintas',pet:'pet shop',electronics:'eletrônicos',
+  mobile_phone:'celulares',computer:'informática',appliance:'eletrodomésticos',clothes:'roupas',shoes:'calçados',sports:'esportes',cosmetics:'cosméticos',
+  beauty:'beleza',optician:'ótica',books:'livraria',stationery:'papelaria',toys:'brinquedos',furniture:'móveis',houseware:'utilidades',variety_store:'variedades',
+  beverages:'bebidas',alcohol:'bebidas',car_parts:'autopeças',car_repair:'oficina',tyres:'pneus',bicycle:'bicicletas',garden_centre:'jardinagem',
+  agrarian:'agropecuária',florist:'floricultura',gift:'presentes',jewelry:'joalheria',kiosk:'banca',marketplace:'feira/mercado',confectionery:'doceria',
+  deli:'delicatessen',seafood:'peixaria',dairy:'laticínios',frozen_food:'congelados',medical_supply:'artigos médicos',baby_goods:'bebê',bag:'bolsas',
+  fabric:'tecidos',craft:'artesanato',music:'música',tobacco:'tabacaria',e_cigarette:'tabacaria',copyshop:'copiadora',laundry:'lavanderia',
+  restaurant:'restaurante',fast_food:'lanchonete',cafe:'café',bar:'bar',pub:'bar',biergarten:'bar',ice_cream:'sorveteria',food_court:'praça de alimentação',
+  bank:'banco',atm:'caixa eletrônico',bureau_de_change:'câmbio',hospital:'hospital',clinic:'clínica',doctors:'consultório',dentist:'dentista',
+  veterinary:'veterinário',parking:'estacionamento',car_wash:'lava-jato',charging_station:'recarga elétrica',cinema:'cinema',theatre:'teatro',
+  nightclub:'balada',school:'escola',university:'universidade',college:'faculdade',kindergarten:'creche',language_school:'escola de idiomas',
+  driving_school:'autoescola',post_office:'correios',library:'biblioteca',townhall:'prefeitura',courthouse:'fórum',police:'polícia',
+  place_of_worship:'igreja/templo',community_centre:'centro comunitário',events_venue:'espaço de eventos',coworking_space:'coworking',
+  hairdresser:'salão',fitness_centre:'academia',sports_centre:'centro esportivo',stadium:'estádio',swimming_pool:'piscina',park:'parque',
+  playground:'parquinho',pitch:'quadra',hotel:'hotel',hostel:'hostel',guest_house:'pousada',motel:'motel',museum:'museu',attraction:'atração',
+  laboratory:'laboratório',physiotherapist:'fisioterapia',psychotherapist:'psicologia',optometrist:'optometria',estate_agent:'imobiliária',
+  insurance:'seguros',lawyer:'advocacia',accountant:'contabilidade',company:'empresa',government:'órgão público',electrician:'eletricista',
+  plumber:'encanador',shoemaker:'sapateiro',tailor:'costureira',photographer:'fotógrafo',locksmith:'chaveiro'};
+const placeType = tg => { const v = tg.shop || tg.amenity || tg.leisure || tg.tourism || tg.healthcare || tg.craft || tg.office || ''; return SHOP_PT[v] || ''; };
+const NOISE = /^(bench|waste_basket|waste_disposal|recycling|toilets|drinking_water|parking_space|parking_entrance|bicycle_parking|motorcycle_parking|vending_machine|telephone|post_box|shelter|clock|fountain|grit_bin|bbq|hunting_stand|picnic_table|yes)$/;
+function addPlace(out, seen, lat, lon, name, la, lo, maxD, type){
   name = String(name||'').trim(); if(!name || la==null || lo==null) return;
   const d = distM(lat,lon,la,lo); if(d > maxD) return;
   const key = name.toLowerCase();
   const prev = seen.get(key);
-  if(prev){ if(d < prev.d) prev.d = d; return; }
-  const o = {name, d}; seen.set(key, o); out.push(o);
+  if(prev){ if(d < prev.d) prev.d = d; if(!prev.type && type) prev.type = type; return; }
+  const o = {name, d, type: type||''}; seen.set(key, o); out.push(o);
 }
-// Mercados que você já usou aqui (o app aprende o lugar quando você escolhe ou salva)
+// Lojas que você já usou aqui (o app aprende o lugar quando você escolhe ou salva)
 const PLACES_KEY = 'meusprecos.places';
 function learnedPlaces(){ try{ return JSON.parse(localStorage.getItem(PLACES_KEY)||'[]'); }catch(e){ return []; } }
-function learnPlace(name){
+function learnPlace(name, type){
   if(!name || !nearCache || Date.now()-nearCache.t > 20*60*1000) return;
   try{
     const arr = learnedPlaces().filter(p => !(p.name.toLowerCase()===name.toLowerCase() && distM(p.lat,p.lon,nearCache.lat,nearCache.lon) < 300));
-    arr.push({name, lat:nearCache.lat, lon:nearCache.lon});
+    if(!type){ const hit = nearCache.list.find(m => norm(m.name)===norm(name)); type = hit ? hit.type : ''; }
+    arr.push({name, lat:nearCache.lat, lon:nearCache.lon, type: type||''});
     localStorage.setItem(PLACES_KEY, JSON.stringify(arr.slice(-200)));
   }catch(e){}
 }
 async function fetchNearby(lat, lon){
   const out = [], seen = new Map(), errs = [];
-  learnedPlaces().forEach(p => addPlace(out, seen, lat, lon, p.name, p.lat, p.lon, 400));
-  const q = `[out:json][timeout:12];(nwr["shop"~"^(supermarket|convenience|wholesale|greengrocer|butcher|bakery|department_store|general)$"](around:500,${lat},${lon});nwr["amenity"="marketplace"](around:500,${lat},${lon}););out center tags 40;`;
+  learnedPlaces().forEach(p => addPlace(out, seen, lat, lon, p.name, p.lat, p.lon, 1000, p.type));
+  // Qualquer lugar com nome: lojas, restaurantes, serviços, saúde, lazer, hotéis, escritórios
+  const A = `(around:1000,${lat},${lon})`;
+  const q = `[out:json][timeout:20];(nwr["shop"]["name"]${A};nwr["amenity"]["name"]${A};nwr["leisure"]["name"]${A};nwr["tourism"]["name"]${A};nwr["healthcare"]["name"]${A};nwr["craft"]["name"]${A};nwr["office"]["name"]${A};);out center tags 600;`;
   const mirrors = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.private.coffee/api/interpreter'];
   let got = false;
   try{
-    const j = await Promise.any(mirrors.map(m => timedFetch(m + '?data=' + encodeURIComponent(q), 14000).then(j => { if(!j || !Array.isArray(j.elements)) throw {code:'bad'}; return j; })));
-    j.elements.forEach(el => { const tg = el.tags||{}; addPlace(out, seen, lat, lon, tg.name || tg.brand, el.lat ?? (el.center && el.center.lat), el.lon ?? (el.center && el.center.lon), 600); });
+    const j = await Promise.any(mirrors.map(m => timedFetch(m + '?data=' + encodeURIComponent(q), 22000).then(j => { if(!j || !Array.isArray(j.elements)) throw {code:'bad'}; return j; })));
+    j.elements.forEach(el => { const tg = el.tags||{}; if(tg.shop==='vacant' || NOISE.test(tg.amenity||'') || (!tg.shop && !tg.amenity && NOISE.test(tg.leisure||tg.tourism||''))) return; addPlace(out, seen, lat, lon, tg.name || tg.brand, el.lat ?? (el.center && el.center.lat), el.lon ?? (el.center && el.center.lon), 1200, placeType(tg)); });
     got = true;
   }catch(e){ (e && e.errors ? e.errors : [e]).forEach(x => errs.push(x && (x.status || x.code))); }
   // Reserva: busca por nome no Photon (também usa dados do OpenStreetMap)
   if(!got || !out.length){
-    const terms = ['supermercado','mercadinho','atacado'];
+    const terms = ['supermercado','farmácia','loja','posto','restaurante'];
     const res = await Promise.allSettled(terms.map(t => timedFetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&lat=${lat}&lon=${lon}&limit=15`, 10000)));
     res.forEach(r => {
       if(r.status !== 'fulfilled'){ errs.push(r.reason && (r.reason.status || r.reason.code)); return; }
       got = true;
       (r.value.features||[]).forEach(f => {
         const p = f.properties||{}, c = f.geometry && f.geometry.coordinates;
-        if(p.osm_key !== 'shop' && p.osm_value !== 'marketplace') return;
-        if(c) addPlace(out, seen, lat, lon, p.name, c[1], c[0], 1500);
+        if(!/^(shop|amenity|leisure|tourism|healthcare|craft|office)$/.test(p.osm_key) || NOISE.test(p.osm_value)) return;
+        if(c) addPlace(out, seen, lat, lon, p.name, c[1], c[0], 2000, SHOP_PT[p.osm_value]||'');
       });
     });
   }
   if(!got && !out.length) throw {code:'svc', detail: [...new Set(errs.filter(Boolean))].join(', ')};
-  return out.sort((a,b)=>a.d-b.d).slice(0,40);
+  return out.sort((a,b)=>a.d-b.d).slice(0,300);
 }
 const norm = x => String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
 let nearPending = null;
@@ -738,7 +764,7 @@ function ensureNearby(){
   if(nearPending) return nearPending;
   nearPending = (async () => {
     const c = await getPos();
-    if(nearCache && Date.now()-nearCache.t < 5*60*1000 && distM(c.latitude,c.longitude,nearCache.lat,nearCache.lon) < 80){ nearCache.t = Date.now(); return nearCache.list; }
+    if(nearCache && Date.now()-nearCache.t < 5*60*1000 && distM(c.latitude,c.longitude,nearCache.lat,nearCache.lon) < 150){ nearCache.t = Date.now(); return nearCache.list; }
     const list = await fetchNearby(c.latitude, c.longitude);
     nearCache = {lat:c.latitude, lon:c.longitude, t:Date.now(), list};
     return list;
@@ -746,21 +772,21 @@ function ensureNearby(){
   return nearPending;
 }
 const fmtD = d => d<1000 ? Math.round(d/10)*10+' m' : (d/1000).toFixed(1).replace('.',',')+' km';
-const chip = (inputId, name, d) => `<button type="button" class="near-chip" data-pick="${esc(inputId)}" data-name="${esc(name)}">${esc(name)}${d!=null?` <small>${fmtD(d)}</small>`:''}</button>`;
+const chip = (inputId, name, d, type) => `<button type="button" class="near-chip" data-pick="${esc(inputId)}" data-name="${esc(name)}" data-type="${esc(type||'')}">${esc(name)}${(type||d!=null)?` <small>${[type, d!=null?fmtD(d):''].filter(Boolean).map(esc).join(' · ')}</small>`:''}</button>`;
 function nearError(e){
-  return e && e.code===1 ? 'Permita o acesso à localização para buscar mercados.'
+  return e && e.code===1 ? 'Permita o acesso à localização para buscar lugares perto.'
     : e && e.code==='svc' ? (navigator.onLine===false ? 'Sem internet para buscar no mapa. Digite o nome.' : 'O serviço de mapa não respondeu agora' + (e.detail?` (${esc(e.detail)})`:'') + '. Tente de novo em instantes ou digite o nome.')
     : e && e.code==='none' ? 'Este navegador não informa a localização.'
     : 'Não consegui pegar sua localização. Tente de novo.';
 }
 async function findNear(inputId){
   const out = document.querySelector(`[data-near-out="${inputId}"]`); if(!out) return;
-  out.innerHTML = '<span class="count">Buscando mercados perto de você…</span>';
+  out.innerHTML = '<span class="count">Buscando lugares perto de você…</span>';
   try{
     const list = await ensureNearby();
     if(!document.body.contains(out)) return;
-    out.innerHTML = list.length ? list.slice(0,8).map(m=>chip(inputId,m.name,m.d)).join('')
-      : '<span class="count">Não achei mercados no mapa por aqui. Digite o nome.</span>';
+    out.innerHTML = list.length ? list.slice(0,10).map(m=>chip(inputId,m.name,m.d,m.type)).join('')
+      : '<span class="count">Não achei lugares no mapa por aqui. Digite o nome.</span>';
   }catch(e){ if(document.body.contains(out)) out.innerHTML = `<span class="count">${nearError(e)}</span>`; }
 }
 // Sugestões enquanto digita: perto de você primeiro, depois os que você já usou
@@ -775,10 +801,10 @@ function renderSuggest(inputId, loading){
   const q = norm(inp.value);
   const near = nearCache ? nearCache.list : [];
   const used = new Set(), picks = [];
-  near.filter(m => !q || norm(m.name).includes(q)).slice(0, q ? 6 : 5).forEach(m => { used.add(norm(m.name)); picks.push([m.name, m.d]); });
+  near.filter(m => !q || norm(m.name).includes(q) || norm(m.type).includes(q)).slice(0, q ? 6 : 5).forEach(m => { used.add(norm(m.name)); picks.push([m.name, m.d, m.type]); });
   if(q) savedStores().filter(s => norm(s.name).includes(q) && !used.has(norm(s.name))).slice(0,4).forEach(s => picks.push([s.name, null]));
   // já digitou exatamente o único nome sugerido: não precisa sugerir
-  let html = (picks.length===1 && norm(picks[0][0])===q) ? '' : picks.map(([n,d]) => chip(inputId, n, d)).join('');
+  let html = (picks.length===1 && norm(picks[0][0])===q) ? '' : picks.map(([n,d,t]) => chip(inputId, n, d, t)).join('');
   if(loading && !nearFresh()) html += '<span class="count">procurando perto…</span>';
   out.innerHTML = html;
 }
@@ -822,7 +848,7 @@ document.addEventListener('click', ev=>{
   if(t.closest('#expBtn')){ exportBackup(); return; }
   const nb = t.closest('[data-near]'); if(nb){ findNear(nb.dataset.near); return; }
   const pk = t.closest('[data-pick]');
-  if(pk){ const inp = document.getElementById(pk.dataset.pick); if(inp){ inp.value = pk.dataset.name; setTrip(pk.dataset.name); learnPlace(pk.dataset.name); } const o = pk.parentElement; if(o) o.innerHTML=''; return; }
+  if(pk){ const inp = document.getElementById(pk.dataset.pick); if(inp){ inp.value = pk.dataset.name; setTrip(pk.dataset.name); learnPlace(pk.dataset.name, pk.dataset.type); } const o = pk.parentElement; if(o) o.innerHTML=''; return; }
   if(t.closest('#scanBtn')){ startScan('global'); return; }
   if(t.closest('[data-scan-form]')){ startScan('form'); return; }
   if(t.closest('#camClose')){ stopCam(); return; }
