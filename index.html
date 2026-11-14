@@ -67,6 +67,8 @@ h3{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .cam .frame{position:absolute;left:10%;right:10%;top:38%;height:22%;border:3px solid #fff;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
 .cam .frame::after{content:"";position:absolute;left:6%;right:6%;top:50%;border-top:2px solid #ff5a4a;opacity:.9}
 .cam .hint{position:absolute;top:24px;left:16px;right:16px;text-align:center;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.cam-msg{position:absolute;left:16px;right:16px;top:64px;background:rgba(0,0,0,.8);color:#fff;padding:14px 16px;border-radius:12px;font-size:15px;line-height:1.4;margin:0}
+.cam-msg[hidden]{display:none}
 .cam .bar{display:flex;gap:10px;padding:16px;justify-content:center;background:#000}
 .cam .btn{background:#222;color:#fff;border-color:#444}
 .status{margin:4px 0 0;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
@@ -192,6 +194,7 @@ input::placeholder{color:var(--muted);opacity:.8}
   <video id="camVideo" playsinline muted autoplay></video>
   <div class="frame"></div>
   <p class="hint">Aponte para o código de barras</p>
+  <p id="camMsg" class="cam-msg" hidden role="alert"></p>
   <div class="bar">
     <button id="camPhoto" class="btn" type="button">Usar foto</button>
     <button id="camClose" class="btn" type="button">Cancelar</button>
@@ -567,17 +570,31 @@ function stopCam(){
   const v=$('#camVideo'); v.srcObject = null;
   $('#cam').hidden = true;
 }
+function camMessage(html){ const m=$('#camMsg'); m.innerHTML = html || ''; m.hidden = !html; }
 async function startScan(target){
   scanTarget = target;
-  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ $('#scanFile').click(); return; }
-  $('#cam').hidden = false; camOn = true;
+  $('#cam').hidden = false; camOn = true; camMessage('');
   const v = $('#camVideo');
-  const constraints = {video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false};
+  v.setAttribute('playsinline',''); v.setAttribute('muted',''); v.muted = true;
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    camMessage('Este navegador não libera a câmera ao vivo. Toque em <b>Usar foto</b>.'); return;
+  }
+  // 1) Pede a câmera primeiro, ainda no toque do botão (o iPhone exige isso)
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+  }catch(e){
+    const n = e && e.name;
+    camMessage(n==='NotAllowedError'
+      ? 'A câmera foi bloqueada. No iPhone: <b>Ajustes → Safari → Câmera → Perguntar</b> (ou Permitir), feche o app e abra de novo. Enquanto isso, toque em <b>Usar foto</b>.'
+      : n==='NotFoundError' ? 'Não encontrei câmera neste aparelho. Toque em <b>Usar foto</b>.'
+      : 'Não consegui abrir a câmera' + (n?` (${esc(n)})`:'') + '. Toque em <b>Usar foto</b>.');
+    return;
+  }
+  if(!camOn){ stopCam(); return; }
+  try{ v.srcObject = camStream; await v.play(); }catch(e){}
+  // 2) Depois liga o leitor
   try{
     if(await hasNativeDetector()){
-      camStream = await navigator.mediaDevices.getUserMedia(constraints);
-      if(!camOn){ stopCam(); return; }
-      v.srcObject = camStream; await v.play();
       const det = new BarcodeDetector({formats:FORMATS});
       const tick = async () => {
         if(!camOn) return;
@@ -589,14 +606,14 @@ async function startScan(target){
       const Z = await loadZXing();
       if(!camOn) return;
       camReader = new Z.BrowserMultiFormatReader(zxHints(Z), 200);
-      await camReader.decodeFromConstraints(constraints, v, (res)=>{ if(res && camOn) gotCode(res.getText()); });
+      await camReader.decodeFromStream(camStream, v, (res)=>{ if(res && camOn) gotCode(res.getText()); });
     }
   }catch(e){
-    stopCam();
-    toast('Sem acesso à câmera. Tire uma foto do código.');
-    $('#scanFile').click();
+    camMessage('A câmera abriu, mas o leitor não carregou' + (e&&e.name?` (${esc(e.name)})`:'') + '. Toque em <b>Usar foto</b>.');
   }
 }
+// Deixa o leitor pronto antes de precisar (iPhone não tem leitor nativo)
+window.addEventListener('load', ()=>{ setTimeout(async ()=>{ if(!(await hasNativeDetector())) loadZXing().catch(()=>{}); }, 1500); });
 function gotCode(code){
   stopCam();
   try{ navigator.vibrate && navigator.vibrate(60); }catch(e){}
