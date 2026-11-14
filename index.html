@@ -393,7 +393,7 @@ function openDetail(id){
       <div class="money"><span>R$</span><input id="cmpPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div>
       <div id="cmpOut" class="cmp"></div>
       <div class="field"><label for="cmpStore">Mercado</label>
-        <div class="ean-row"><input id="cmpStore" list="stores" placeholder="Onde?" autocomplete="off"><button class="btn" type="button" data-near="cmpStore">📍 Perto</button></div>
+        <div class="ean-row"><input id="cmpStore" placeholder="Onde?" autocomplete="off"><button class="btn" type="button" data-near="cmpStore">📍 Perto</button></div>
         <div class="near" data-near-out="cmpStore" aria-live="polite"></div></div>
       <div class="field"><label for="cmpDate">Data</label><input id="cmpDate" type="date"></div>
       <p id="cmpErr" class="err"></p>
@@ -453,7 +453,7 @@ function saveBuy(){
   const v = parsePrice($('#cmpPrice').value);
   if(v===null){ $('#cmpErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#cmpPrice').focus(); return; }
   const e = {p:v, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()};
-  if(e.s && e.d===today()) setTrip(e.s);
+  if(e.s && e.d===today()){ setTrip(e.s); learnPlace(e.s); }
   persist({...p, entries:[...(p.entries||[]), e], updated:Date.now()});
   $('#cmpPrice').value=''; $('#cmpErr').textContent='';
   renderCmp();
@@ -473,7 +473,7 @@ function openAdd(prefill, ean){
       <div class="field"><label for="fUnit">Tamanho / unidade (opcional)</label><input id="fUnit" placeholder="Ex.: 5 kg, lata 350 ml" autocomplete="off"></div>
       <div class="field"><label for="fPrice">Preço pago</label><div class="money"><span>R$</span><input id="fPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div></div>
       <div class="field"><label for="fStore">Mercado</label>
-        <div class="ean-row"><input id="fStore" list="stores" placeholder="Onde?" autocomplete="off" value="${esc(tripStore())}"><button class="btn" type="button" data-near="fStore">📍 Perto</button></div>
+        <div class="ean-row"><input id="fStore" placeholder="Onde?" autocomplete="off" value="${esc(tripStore())}"><button class="btn" type="button" data-near="fStore">📍 Perto</button></div>
         <div class="near" data-near-out="fStore" aria-live="polite"></div></div>
       <div class="field"><label for="fDate">Data</label><input id="fDate" type="date" value="${today()}"></div>
       <p id="fErr" class="err"></p>
@@ -532,7 +532,7 @@ function submitAdd(ev){
   if(!name){ $('#fErr').textContent='Dê um nome ao produto.'; $('#fName').focus(); return; }
   if(v===null){ $('#fErr').textContent='Digite o preço pago, ex.: 12,90'; $('#fPrice').focus(); return; }
   const e = {p:v, d:$('#fDate').value || today(), s:$('#fStore').value.trim()};
-  if(e.s && e.d===today()) setTrip(e.s);
+  if(e.s && e.d===today()){ setTrip(e.s); learnPlace(e.s); }
   const ean = $('#fEan').value.replace(/\s/g,'');
   const same = (ean && findByEan(ean)) || [...items.values()].find(p => (p.name||'').toLowerCase()===name.toLowerCase() && (p.unit||'').toLowerCase()===unit.toLowerCase());
   if(same){ const up={...same, entries:[...(same.entries||[]), e], updated:Date.now()}; if(!up.ean && ean) up.ean=ean; persist(up); toast('Compra adicionada ao produto existente'); }
@@ -678,49 +678,129 @@ function getPos(){
     navigator.geolocation.getCurrentPosition(p=>res(p.coords), e=>rej(e), {enableHighAccuracy:true, timeout:12000, maximumAge:60000});
   });
 }
+function timedFetch(url, ms){
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), ms);
+  return fetch(url, {signal:ctl.signal}).then(r=>{ clearTimeout(t); if(!r.ok) throw {code:'http', status:r.status}; return r.json(); },
+    e=>{ clearTimeout(t); throw {code: e && e.name==='AbortError' ? 'timeout' : 'fetch'}; });
+}
+function addPlace(out, seen, lat, lon, name, la, lo, maxD){
+  name = String(name||'').trim(); if(!name || la==null || lo==null) return;
+  const d = distM(lat,lon,la,lo); if(d > maxD) return;
+  const key = name.toLowerCase();
+  const prev = seen.get(key);
+  if(prev){ if(d < prev.d) prev.d = d; return; }
+  const o = {name, d}; seen.set(key, o); out.push(o);
+}
+// Mercados que você já usou aqui (o app aprende o lugar quando você escolhe ou salva)
+const PLACES_KEY = 'meusprecos.places';
+function learnedPlaces(){ try{ return JSON.parse(localStorage.getItem(PLACES_KEY)||'[]'); }catch(e){ return []; } }
+function learnPlace(name){
+  if(!name || !nearCache || Date.now()-nearCache.t > 20*60*1000) return;
+  try{
+    const arr = learnedPlaces().filter(p => !(p.name.toLowerCase()===name.toLowerCase() && distM(p.lat,p.lon,nearCache.lat,nearCache.lon) < 300));
+    arr.push({name, lat:nearCache.lat, lon:nearCache.lon});
+    localStorage.setItem(PLACES_KEY, JSON.stringify(arr.slice(-200)));
+  }catch(e){}
+}
 async function fetchNearby(lat, lon){
-  const q = `[out:json][timeout:15];(nwr["shop"~"^(supermarket|convenience|wholesale|greengrocer|butcher|bakery|department_store|general)$"](around:450,${lat},${lon});nwr["amenity"="marketplace"](around:450,${lat},${lon}););out center tags 40;`;
-  const hosts = ['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter'];
-  for(const h of hosts){
-    try{
-      const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), 15000);
-      const r = await fetch(h, {method:'POST', body:'data='+encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:ctl.signal});
-      clearTimeout(t);
-      if(!r.ok) continue;
-      const j = await r.json();
-      const seen = new Set(), out = [];
-      (j.elements||[]).forEach(el=>{
-        const tg = el.tags||{}; const name = (tg.name || tg.brand || '').trim(); if(!name) return;
-        const la = el.lat ?? (el.center && el.center.lat), lo = el.lon ?? (el.center && el.center.lon); if(la==null) return;
-        const d = distM(lat,lon,la,lo), key = name.toLowerCase();
-        if(seen.has(key)) return; seen.add(key);
-        out.push({name, d});
+  const out = [], seen = new Map(), errs = [];
+  learnedPlaces().forEach(p => addPlace(out, seen, lat, lon, p.name, p.lat, p.lon, 400));
+  const q = `[out:json][timeout:12];(nwr["shop"~"^(supermarket|convenience|wholesale|greengrocer|butcher|bakery|department_store|general)$"](around:500,${lat},${lon});nwr["amenity"="marketplace"](around:500,${lat},${lon}););out center tags 40;`;
+  const mirrors = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.private.coffee/api/interpreter'];
+  let got = false;
+  try{
+    const j = await Promise.any(mirrors.map(m => timedFetch(m + '?data=' + encodeURIComponent(q), 14000).then(j => { if(!j || !Array.isArray(j.elements)) throw {code:'bad'}; return j; })));
+    j.elements.forEach(el => { const tg = el.tags||{}; addPlace(out, seen, lat, lon, tg.name || tg.brand, el.lat ?? (el.center && el.center.lat), el.lon ?? (el.center && el.center.lon), 600); });
+    got = true;
+  }catch(e){ (e && e.errors ? e.errors : [e]).forEach(x => errs.push(x && (x.status || x.code))); }
+  // Reserva: busca por nome no Photon (também usa dados do OpenStreetMap)
+  if(!got || !out.length){
+    const terms = ['supermercado','mercadinho','atacado'];
+    const res = await Promise.allSettled(terms.map(t => timedFetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&lat=${lat}&lon=${lon}&limit=15`, 10000)));
+    res.forEach(r => {
+      if(r.status !== 'fulfilled'){ errs.push(r.reason && (r.reason.status || r.reason.code)); return; }
+      got = true;
+      (r.value.features||[]).forEach(f => {
+        const p = f.properties||{}, c = f.geometry && f.geometry.coordinates;
+        if(p.osm_key !== 'shop' && p.osm_value !== 'marketplace') return;
+        if(c) addPlace(out, seen, lat, lon, p.name, c[1], c[0], 1500);
       });
-      return out.sort((a,b)=>a.d-b.d).slice(0,6);
-    }catch(e){}
+    });
   }
-  throw {code:'net'};
+  if(!got && !out.length) throw {code:'svc', detail: [...new Set(errs.filter(Boolean))].join(', ')};
+  return out.sort((a,b)=>a.d-b.d).slice(0,40);
+}
+const norm = x => String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+let nearPending = null;
+function nearFresh(){ return nearCache && Date.now()-nearCache.t < 3*60*1000; }
+function ensureNearby(){
+  if(nearFresh()) return Promise.resolve(nearCache.list);
+  if(nearPending) return nearPending;
+  nearPending = (async () => {
+    const c = await getPos();
+    if(nearCache && Date.now()-nearCache.t < 5*60*1000 && distM(c.latitude,c.longitude,nearCache.lat,nearCache.lon) < 80){ nearCache.t = Date.now(); return nearCache.list; }
+    const list = await fetchNearby(c.latitude, c.longitude);
+    nearCache = {lat:c.latitude, lon:c.longitude, t:Date.now(), list};
+    return list;
+  })().finally(()=>{ nearPending = null; });
+  return nearPending;
+}
+const fmtD = d => d<1000 ? Math.round(d/10)*10+' m' : (d/1000).toFixed(1).replace('.',',')+' km';
+const chip = (inputId, name, d) => `<button type="button" class="near-chip" data-pick="${esc(inputId)}" data-name="${esc(name)}">${esc(name)}${d!=null?` <small>${fmtD(d)}</small>`:''}</button>`;
+function nearError(e){
+  return e && e.code===1 ? 'Permita o acesso à localização para buscar mercados.'
+    : e && e.code==='svc' ? (navigator.onLine===false ? 'Sem internet para buscar no mapa. Digite o nome.' : 'O serviço de mapa não respondeu agora' + (e.detail?` (${esc(e.detail)})`:'') + '. Tente de novo em instantes ou digite o nome.')
+    : e && e.code==='none' ? 'Este navegador não informa a localização.'
+    : 'Não consegui pegar sua localização. Tente de novo.';
 }
 async function findNear(inputId){
   const out = document.querySelector(`[data-near-out="${inputId}"]`); if(!out) return;
   out.innerHTML = '<span class="count">Buscando mercados perto de você…</span>';
   try{
-    const c = await getPos();
-    let list;
-    if(nearCache && Date.now()-nearCache.t < 5*60*1000 && distM(c.latitude,c.longitude,nearCache.lat,nearCache.lon) < 80) list = nearCache.list;
-    else { list = await fetchNearby(c.latitude, c.longitude); nearCache = {lat:c.latitude, lon:c.longitude, t:Date.now(), list}; }
+    const list = await ensureNearby();
     if(!document.body.contains(out)) return;
-    if(!list.length){ out.innerHTML = '<span class="count">Não achei mercados no mapa por aqui. Digite o nome.</span>'; return; }
-    out.innerHTML = list.map(m=>`<button type="button" class="near-chip" data-pick="${esc(inputId)}" data-name="${esc(m.name)}">${esc(m.name)} <small>${m.d<1000?Math.round(m.d/10)*10+' m':(m.d/1000).toFixed(1).replace('.',',')+' km'}</small></button>`).join('');
-  }catch(e){
-    if(!document.body.contains(out)) return;
-    const msg = e && e.code===1 ? 'Permita o acesso à localização para buscar mercados.'
-      : e && e.code==='net' ? 'Sem internet para buscar no mapa. Digite o nome.'
-      : e && e.code==='none' ? 'Este navegador não informa a localização.'
-      : 'Não consegui pegar sua localização. Tente de novo.';
-    out.innerHTML = `<span class="count">${msg}</span>`;
-  }
+    out.innerHTML = list.length ? list.slice(0,8).map(m=>chip(inputId,m.name,m.d)).join('')
+      : '<span class="count">Não achei mercados no mapa por aqui. Digite o nome.</span>';
+  }catch(e){ if(document.body.contains(out)) out.innerHTML = `<span class="count">${nearError(e)}</span>`; }
 }
+// Sugestões enquanto digita: perto de você primeiro, depois os que você já usou
+function savedStores(){
+  const m = new Map();
+  items.forEach(p => (p.entries||[]).forEach(e => { if(e.s){ const k=norm(e.s); const o=m.get(k)||{name:e.s,n:0,last:''}; o.n++; if(e.d>o.last) o.last=e.d; m.set(k,o); } }));
+  return [...m.values()].sort((a,b)=> b.last.localeCompare(a.last) || b.n-a.n);
+}
+function renderSuggest(inputId, loading){
+  const inp = document.getElementById(inputId), out = document.querySelector(`[data-near-out="${inputId}"]`);
+  if(!inp || !out) return;
+  const q = norm(inp.value);
+  const near = nearCache ? nearCache.list : [];
+  const used = new Set(), picks = [];
+  near.filter(m => !q || norm(m.name).includes(q)).slice(0, q ? 6 : 5).forEach(m => { used.add(norm(m.name)); picks.push([m.name, m.d]); });
+  if(q) savedStores().filter(s => norm(s.name).includes(q) && !used.has(norm(s.name))).slice(0,4).forEach(s => picks.push([s.name, null]));
+  // já digitou exatamente o único nome sugerido: não precisa sugerir
+  let html = (picks.length===1 && norm(picks[0][0])===q) ? '' : picks.map(([n,d]) => chip(inputId, n, d)).join('');
+  if(loading && !nearFresh()) html += '<span class="count">procurando perto…</span>';
+  out.innerHTML = html;
+}
+let suggestT = null, geoGranted = null, nearFailT = 0;
+async function geoAllowed(){
+  if(geoGranted !== null) return geoGranted;
+  try{ const p = await navigator.permissions.query({name:'geolocation'}); geoGranted = p.state === 'granted'; p.onchange = () => { geoGranted = p.state === 'granted'; }; }
+  catch(e){ geoGranted = false; }
+  return geoGranted;
+}
+function suggestFor(inputId, askLocation){
+  renderSuggest(inputId, !nearFresh());
+  if(nearFresh()) return;
+  clearTimeout(suggestT);
+  suggestT = setTimeout(async () => {
+    if((!askLocation && !(await geoAllowed())) || Date.now()-nearFailT < 60000) { renderSuggest(inputId, false); return; }
+    try{ await ensureNearby(); }catch(e){ nearFailT = Date.now(); }
+    if(document.getElementById(inputId)) renderSuggest(inputId, false);
+  }, askLocation ? 350 : 0);
+}
+document.addEventListener('focusin', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore') suggestFor(id, false); });
+document.addEventListener('input', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore') suggestFor(id, true); });
 
 /* ---------- Folha: abrir/fechar ---------- */
 let lastFocus = null;
@@ -742,7 +822,7 @@ document.addEventListener('click', ev=>{
   if(t.closest('#expBtn')){ exportBackup(); return; }
   const nb = t.closest('[data-near]'); if(nb){ findNear(nb.dataset.near); return; }
   const pk = t.closest('[data-pick]');
-  if(pk){ const inp = document.getElementById(pk.dataset.pick); if(inp){ inp.value = pk.dataset.name; setTrip(pk.dataset.name); } const o = pk.parentElement; if(o) o.innerHTML=''; return; }
+  if(pk){ const inp = document.getElementById(pk.dataset.pick); if(inp){ inp.value = pk.dataset.name; setTrip(pk.dataset.name); learnPlace(pk.dataset.name); } const o = pk.parentElement; if(o) o.innerHTML=''; return; }
   if(t.closest('#scanBtn')){ startScan('global'); return; }
   if(t.closest('[data-scan-form]')){ startScan('form'); return; }
   if(t.closest('#camClose')){ stopCam(); return; }

@@ -1,5 +1,5 @@
 // Guarda o app no aparelho para abrir sem internet
-const CACHE = 'meus-precos-v4';
+const CACHE = 'meus-precos-v6';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'zxing.min.js'];
 
 self.addEventListener('install', e => {
@@ -10,6 +10,9 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const u = new URL(e.request.url);
+  // Só guarda os arquivos do app e as fontes; buscas de mapa e produtos vão direto pra internet
+  if (u.origin !== self.location.origin && !/fonts\.(googleapis|gstatic)\.com$/.test(u.hostname)) return;
   // Rede primeiro (pega atualizações), cache se estiver offline
   e.respondWith(
     fetch(e.request).then(res => {
