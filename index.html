@@ -146,6 +146,15 @@ input::placeholder{color:var(--muted);opacity:.8}
 .sug .n{font-weight:600;overflow-wrap:anywhere}
 .sug .n small{font-weight:400;color:var(--muted)}
 .sug .v{font-family:var(--f-mono);font-size:13px;color:var(--muted);white-space:nowrap}
+.wrow{display:flex;gap:6px}
+.wrow input{flex:1}
+.wrow select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 10px}
+.money.sm input{font-size:18px;padding:6px 0}
+.money .suf{font-size:13px}
+.check{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer}
+.check input{width:22px;height:22px;accent-color:var(--accent);flex-shrink:0;margin:0}
+.check small{font-weight:400;color:var(--muted)}
+.hist .w{display:block;font-family:var(--f-mono);font-size:12px;font-weight:400;color:var(--muted)}
 .row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;cursor:pointer;min-width:0}
 .row-edit:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:6px}
 h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
@@ -330,11 +339,11 @@ function importBackup(file){
 function cardHTML(p, example){
   const h = hist(p), last = h[h.length-1], prev = h[h.length-2];
   const d = last && prev ? delta(last.p, prev.p) : null;
-  const meta = [p.unit, last && last.s, last && fdate(last.d)].filter(Boolean).map(esc).join(' · ');
+  const meta = [p.unit || (p.byWeight ? 'por peso' : ''), last && last.s, last && fdate(last.d)].filter(Boolean).map(esc).join(' · ');
   const tag = example ? 'div' : 'button';
   return `<${tag} class="card" ${example?'':`type="button" data-open="${esc(p.id)}"`}>
     <span class="c-main"><span class="c-name">${esc(p.name)}</span><span class="c-meta">${meta}</span></span>
-    <span class="c-price"><span class="mono">${last?fmt(last.p):'—'}</span>${chipFor(d)}</span>
+    <span class="c-price"><span class="mono">${last?fmtU(last.p,p):'—'}</span>${chipFor(d)}</span>
   </${tag}>`;
 }
 function renderList(){
@@ -405,8 +414,8 @@ function openDetail(id){
     </div>
     <div id="dStats" class="stats"></div>
     <section class="slip" aria-label="Comparar com o preço de hoje">
-      <label for="cmpPrice">Preço de hoje</label>
-      <div class="money"><span>R$</span><input id="cmpPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div>
+      ${p.byWeight ? trioHTML('cmpPrice','Preço do kg hoje') : `<label for="cmpPrice">Preço de hoje</label>
+      <div class="money"><span>R$</span><input id="cmpPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div>`}
       <div id="cmpOut" class="cmp"></div>
       <div class="field"><label for="cmpStore">Onde</label>
         <div class="ean-row"><input id="cmpStore" placeholder="Loja, restaurante, posto…" autocomplete="off"><button class="btn" type="button" data-near="cmpStore">📍 Perto</button></div>
@@ -432,15 +441,15 @@ function renderDetailParts(){
   const min = h.reduce((a,e)=> e.p < a.p ? e : a, h[0]);
   const avg = h.reduce((s,e)=>s+e.p,0)/h.length;
   $('#dStats').innerHTML = `
-    <div class="stat"><span>Último pago</span><strong>${fmt(last.p)}</strong><small>${esc([fdate(last.d), last.s].filter(Boolean).join(' · '))}</small></div>
-    <div class="stat"><span>Menor</span><strong>${fmt(min.p)}</strong><small>${esc([fdate(min.d), min.s].filter(Boolean).join(' · '))}</small></div>
-    <div class="stat"><span>Média</span><strong>${fmt(avg)}</strong><small>${h.length} ${h.length===1?'compra':'compras'}</small></div>`;
+    <div class="stat"><span>Último pago</span><strong>${fmtU(last.p,p)}</strong><small>${esc([fdate(last.d), last.s].filter(Boolean).join(' · '))}</small></div>
+    <div class="stat"><span>Menor</span><strong>${fmtU(min.p,p)}</strong><small>${esc([fdate(min.d), min.s].filter(Boolean).join(' · '))}</small></div>
+    <div class="stat"><span>Média</span><strong>${fmtU(avg,p)}</strong><small>${h.length} ${h.length===1?'compra':'compras'}</small></div>`;
   $('#dSpark').innerHTML = sparkSVG(h);
   $('#dHist').innerHTML = h.slice().reverse().map((e,idx,arr)=>{
     const prev = arr[idx+1];
     const d = prev ? delta(e.p, prev.p) : null;
     return `<li><button class="row-edit" type="button" data-edit-entry="${e._i}" aria-label="Editar compra de ${fdate(e.d)}"><span class="d">${fdate(e.d)}</span><span class="s">${esc(e.s||'—')}</span>
-      <span class="p">${fmt(e.p)} ${d?chipFor(d):''}</span></button>
+      <span class="p">${fmtU(e.p,p)} ${d?chipFor(d):''}${p.byWeight && e.w ? `<span class="w">${fmtW(e.w)}${e.t?' = '+fmt(e.t):''}</span>` : ''}</span></button>
       <button class="del" type="button" data-del-entry="${e._i}" aria-label="Apagar compra de ${fdate(e.d)}">×</button></li>`;
   }).join('');
   renderCmp();
@@ -448,30 +457,41 @@ function renderDetailParts(){
 function renderCmp(){
   const out = $('#cmpOut'); if(!out) return;
   const p = items.get(openId); const h = hist(p);
-  const v = parsePrice($('#cmpPrice').value);
+  const tv = p.byWeight ? readTrio('cmpPrice') : null;
+  const v = p.byWeight ? (tv ? tv.p : null) : parsePrice($('#cmpPrice').value);
+  const U = unitOf(p);
   if(!h.length){ out.innerHTML = 'Digite o preço e registre a primeira compra.'; return; }
   const last = h[h.length-1];
-  if(v===null){ out.innerHTML = `Digite o preço de hoje para comparar com os <span class="mono">${fmt(last.p)}</span> que você pagou em ${fdate(last.d)}.`; return; }
+  if(v===null){ out.innerHTML = `Digite o preço de hoje para comparar com os <span class="mono">${fmtU(last.p,p)}</span> que você pagou em ${fdate(last.d)}.`; return; }
   const d = delta(v, last.p);
   const min = h.reduce((a,e)=> e.p < a.p ? e : a, h[0]);
   let big;
   if(d.dir==='same') big = `<span class="big">Mesmo preço da última vez</span>`;
-  else if(d.dir==='up') big = `<span class="big up">▲ ${fmt(d.diff)} mais caro (+${PCT.format(d.pct)}%)</span>`;
-  else big = `<span class="big down">▼ ${fmt(-d.diff)} mais barato (−${PCT.format(-d.pct)}%)</span>`;
+  else if(d.dir==='up') big = `<span class="big up">▲ ${fmt(d.diff)}${U} mais caro (+${PCT.format(d.pct)}%)</span>`;
+  else big = `<span class="big down">▼ ${fmt(-d.diff)}${U} mais barato (−${PCT.format(-d.pct)}%)</span>`;
+  if(p.byWeight && tv && tv.w && d.dir!=='same'){ const x = Math.round(Math.abs(d.diff*tv.w)*100)/100; big += `<span>Nessa quantidade (${fmtW(tv.w)}): ${fmt(x)} ${d.dir==='up'?'a mais':'a menos'} que da última vez.</span>`; }
   let line2;
   if(v < min.p - 0.004) line2 = `<span class="best">É o menor preço que você já registrou para este produto.</span>`;
   else if(Math.abs(v-min.p) < 0.005) line2 = `Igual ao menor preço já pago (${fdate(min.d)}${min.s?', '+esc(min.s):''}).`;
-  else { const dm = delta(v, min.p); line2 = `Menor já pago: <span class="mono">${fmt(min.p)}</span> em ${fdate(min.d)}${min.s?' ('+esc(min.s)+')':''}, hoje está ${PCT.format(dm.pct)}% acima.`; }
-  out.innerHTML = `${big}<span>Última compra: <span class="mono">${fmt(last.p)}</span> em ${fdate(last.d)}${last.s?' · '+esc(last.s):''}</span><span>${line2}</span>`;
+  else { const dm = delta(v, min.p); line2 = `Menor já pago: <span class="mono">${fmtU(min.p,p)}</span> em ${fdate(min.d)}${min.s?' ('+esc(min.s)+')':''}, hoje está ${PCT.format(dm.pct)}% acima.`; }
+  out.innerHTML = `${big}<span>Última compra: <span class="mono">${fmtU(last.p,p)}</span> em ${fdate(last.d)}${last.s?' · '+esc(last.s):''}</span><span>${line2}</span>`;
 }
 function saveBuy(){
   const p = items.get(openId);
-  const v = parsePrice($('#cmpPrice').value);
-  if(v===null){ $('#cmpErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#cmpPrice').focus(); return; }
-  const e = {p:v, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()};
+  let e;
+  if(p.byWeight){
+    const r = readTrio('cmpPrice');
+    if(!r){ $('#cmpErr').textContent = 'Preencha o preço do kg, ou o peso e o total pago.'; $('#cmpPrice').focus(); return; }
+    e = {...r, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()};
+  } else {
+    const v = parsePrice($('#cmpPrice').value);
+    if(v===null){ $('#cmpErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#cmpPrice').focus(); return; }
+    e = {p:v, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()};
+  }
   if(e.s && e.d===today()){ setTrip(e.s); learnPlace(e.s); }
   persist({...p, entries:[...(p.entries||[]), e], updated:Date.now()});
-  $('#cmpPrice').value=''; $('#cmpErr').textContent='';
+  if(p.byWeight) clearTrio('cmpPrice'); else $('#cmpPrice').value='';
+  $('#cmpErr').textContent='';
   renderCmp();
   toast('Compra registrada');
 }
@@ -487,7 +507,8 @@ function openAdd(prefill, ean){
         <p id="fLookup" class="count" style="margin:0" aria-live="polite"></p></div>
       <div class="field"><label for="fName">Produto</label><input id="fName" placeholder="Ex.: Arroz tipo 1, Dipirona, Ração" autocomplete="off" value="${esc(prefill||'')}"><div id="fNameSug" class="sug" hidden></div></div>
       <div class="field"><label for="fUnit">Tamanho / unidade (opcional)</label><input id="fUnit" placeholder="Ex.: 5 kg, lata 350 ml" autocomplete="off"></div>
-      <div class="field"><label for="fPrice">Preço pago</label><div class="money"><span>R$</span><input id="fPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div></div>
+      <label class="check"><input type="checkbox" id="fByW"> Vendido por peso <small>carne, queijo, frutas…</small></label>
+      <div id="fPriceBox" style="display:flex;flex-direction:column;gap:12px">${plainPriceHTML('fPrice','Preço pago')}</div>
       <div class="field"><label for="fStore">Onde</label>
         <div class="ean-row"><input id="fStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(tripStore())}"><button class="btn" type="button" data-near="fStore">📍 Perto</button></div>
         <div class="near" data-near-out="fStore" aria-live="polite"></div></div>
@@ -545,15 +566,23 @@ async function autofill(code){
 function submitAdd(ev){
   ev.preventDefault();
   const name = $('#fName').value.trim(), unit = $('#fUnit').value.trim();
-  const v = parsePrice($('#fPrice').value);
+  const byW = !!($('#fByW') && $('#fByW').checked);
   if(!name){ $('#fErr').textContent='Dê um nome ao produto.'; $('#fName').focus(); return; }
-  if(v===null){ $('#fErr').textContent='Digite o preço pago, ex.: 12,90'; $('#fPrice').focus(); return; }
-  const e = {p:v, d:$('#fDate').value || today(), s:$('#fStore').value.trim()};
+  let e;
+  if(byW){
+    const r = readTrio('fPrice');
+    if(!r){ $('#fErr').textContent='Preencha o preço do kg, ou o peso e o total pago.'; $('#fPrice').focus(); return; }
+    e = {...r, d:$('#fDate').value || today(), s:$('#fStore').value.trim()};
+  } else {
+    const v = parsePrice($('#fPrice').value);
+    if(v===null){ $('#fErr').textContent='Digite o preço pago, ex.: 12,90'; $('#fPrice').focus(); return; }
+    e = {p:v, d:$('#fDate').value || today(), s:$('#fStore').value.trim()};
+  }
   if(e.s && e.d===today()){ setTrip(e.s); learnPlace(e.s); }
   const ean = $('#fEan').value.replace(/\s/g,'');
   const same = (ean && findByEan(ean)) || [...items.values()].find(p => (p.name||'').toLowerCase()===name.toLowerCase() && (p.unit||'').toLowerCase()===unit.toLowerCase());
   if(same){ const up={...same, entries:[...(same.entries||[]), e], updated:Date.now()}; if(!up.ean && ean) up.ean=ean; persist(up); toast('Compra adicionada ao produto existente'); }
-  else { const np={id:newId(), name, unit, entries:[e], updated:Date.now()}; if(ean) np.ean=ean; persist(np); toast('Produto salvo'); }
+  else { const np={id:newId(), name, unit, entries:[e], updated:Date.now()}; if(ean) np.ean=ean; if(byW) np.byWeight=true; persist(np); toast('Produto salvo'); }
   closeSheet();
 }
 
@@ -857,6 +886,7 @@ function openEditProduct(){
     <div class="slip">
       <div class="field"><label for="eName">Produto</label><input id="eName" autocomplete="off" value="${esc(p.name)}"></div>
       <div class="field"><label for="eUnit">Tamanho / unidade (opcional)</label><input id="eUnit" autocomplete="off" placeholder="Ex.: 5 kg, lata 350 ml" value="${esc(p.unit||'')}"></div>
+      <label class="check"><input type="checkbox" id="eByW"${p.byWeight?' checked':''}> Vendido por peso <small>compara pelo preço do kg</small></label>
       <div class="field"><label for="eEan">Código de barras (opcional)</label>
         <div class="ean-row"><input id="eEan" inputmode="numeric" autocomplete="off" placeholder="7891234567890" value="${esc(p.ean||'')}"><button class="btn" type="button" data-scan-edit>Ler</button></div></div>
       <p id="eErr" class="err"></p>
@@ -873,6 +903,7 @@ function saveEditProduct(){
   if(!name){ $('#eErr').textContent = 'Dê um nome ao produto.'; $('#eName').focus(); return; }
   if(ean){ const other = [...items.values()].find(x => x.id!==p.id && x.ean===ean); if(other){ $('#eErr').textContent = `Esse código já é de “${other.name}”.`; return; } }
   const np = {...p, name, unit, updated:Date.now()};
+  if($('#eByW').checked) np.byWeight = true; else delete np.byWeight;
   if(ean) np.ean = ean; else delete np.ean;
   persist(np);
   toast('Produto atualizado');
@@ -885,7 +916,7 @@ function openEditEntry(i){
   $('#sheet').innerHTML = `
     <div class="sheet-head"><div><h2 id="sheetTitle">Editar compra</h2><p>${esc(p.name)}</p></div><button class="x" type="button" data-back aria-label="Voltar">×</button></div>
     <div class="slip">
-      <div class="field"><label for="eePrice">Preço pago</label><div class="money"><span>R$</span><input id="eePrice" inputmode="decimal" autocomplete="off" value="${esc(priceStr(e.p))}"></div></div>
+      ${p.byWeight ? trioHTML('eePrice','Preço do kg', e) : `<div class="field"><label for="eePrice">Preço pago</label><div class="money"><span>R$</span><input id="eePrice" inputmode="decimal" autocomplete="off" value="${esc(priceStr(e.p))}"></div></div>`}
       <div class="field"><label for="eeStore">Onde</label>
         <div class="ean-row"><input id="eeStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(e.s||'')}"><button class="btn" type="button" data-near="eeStore">📍 Perto</button></div>
         <div class="near" data-near-out="eeStore" aria-live="polite"></div></div>
@@ -897,12 +928,20 @@ function openEditEntry(i){
         <button id="delEditEntry" class="btn danger wide" type="button">Apagar esta compra</button>
       </div>
     </div>`;
+  if(p.byWeight){ TRIOS.eePrice.last = e.t ? 't' : 'kg'; trioCalc('eePrice'); }
 }
 function saveEditEntry(){
   const p = items.get(openId); if(!p || !p.entries || !p.entries[editIdx]) return;
-  const v = parsePrice($('#eePrice').value);
-  if(v===null){ $('#eeErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#eePrice').focus(); return; }
-  const ne = {p:v, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()};
+  let ne;
+  if(p.byWeight){
+    const r = readTrio('eePrice');
+    if(!r){ $('#eeErr').textContent = 'Preencha o preço do kg, ou o peso e o total pago.'; $('#eePrice').focus(); return; }
+    ne = {...r, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()};
+  } else {
+    const v = parsePrice($('#eePrice').value);
+    if(v===null){ $('#eeErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#eePrice').focus(); return; }
+    ne = {p:v, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()};
+  }
   persist({...p, entries: p.entries.map((x,k)=> k===editIdx ? ne : x), updated:Date.now()});
   toast('Compra atualizada');
   openDetail(p.id);
@@ -925,20 +964,99 @@ function renderNameSug(){
   if(!hits.length){ box.hidden = true; box.innerHTML = ''; return; }
   box.innerHTML = '<div class="sug-h">Já cadastrados: toque para usar</div>' + hits.map(({p}) => {
     const h = hist(p), last = h[h.length-1];
-    return `<button type="button" data-pick-prod="${esc(p.id)}"><span class="n">${esc(p.name)}${p.unit?` <small>${esc(p.unit)}</small>`:''}</span><span class="v">${last?fmt(last.p):''}</span></button>`;
+    return `<button type="button" data-pick-prod="${esc(p.id)}"><span class="n">${esc(p.name)}${p.unit?` <small>${esc(p.unit)}</small>`:''}</span><span class="v">${last?fmtU(last.p,p):''}</span></button>`;
   }).join('');
   box.hidden = false;
 }
 function pickExisting(id){
   const price = $('#fPrice') ? $('#fPrice').value : '', store = $('#fStore') ? $('#fStore').value : '', date = $('#fDate') ? $('#fDate').value : '';
+  const fw = $('#fW') ? $('#fW').value : '', fwu = $('#fWU') ? $('#fWU').value : '', ft = $('#fT') ? $('#fT').value : '';
   openDetail(id);
   if(price && $('#cmpPrice')){ $('#cmpPrice').value = price; }
+  if($('#cmpW')){ if(fwu) $('#cmpWU').value = fwu; if(fw) $('#cmpW').value = fw; if(ft) $('#cmpT').value = ft; trioCalc('cmpPrice', price ? 'cmpPrice' : (fw ? 'cmpW' : null)); }
   if(store && $('#cmpStore')){ $('#cmpStore').value = store; }
   if(date && $('#cmpDate')){ $('#cmpDate').value = date; }
   renderCmp();
   toast('Produto já cadastrado: registre a compra aqui');
 }
 document.addEventListener('input', ev => { if(ev.target.id==='fName') renderNameSug(); });
+
+
+/* ---------- Produtos vendidos por peso ---------- */
+const WU_KEY = 'meusprecos.wu';
+function lastWU(){ try{ return localStorage.getItem(WU_KEY) || 'kg'; }catch(e){ return 'kg'; } }
+function parseNum(x){ x = String(x||'').replace(/[^\d,.]/g,''); if(x.includes(',')) x = x.replace(/\./g,'').replace(',','.'); const v = parseFloat(x); return isFinite(v) && v > 0 ? v : null; }
+const unitOf = prod => prod && prod.byWeight ? '/kg' : '';
+const fmtU = (v, prod) => fmt(v) + unitOf(prod);
+const KG3 = new Intl.NumberFormat('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3});
+const fmtW = w => w < 1 ? Math.round(w*1000) + ' g' : KG3.format(w) + ' kg';
+const money2 = v => v.toFixed(2).replace('.', ',');
+const TRIOS = {
+  fPrice:  {kg:'fPrice',  w:'fW',   wu:'fWU',   t:'fT',   calc:'fCalc',   last:null},
+  cmpPrice:{kg:'cmpPrice',w:'cmpW', wu:'cmpWU', t:'cmpT', calc:'cmpCalc', last:null},
+  eePrice: {kg:'eePrice', w:'eeW',  wu:'eeWU',  t:'eeT',  calc:'eeCalc',  last:null}
+};
+function trioHTML(key, label, e){
+  const ids = TRIOS[key]; ids.last = null;
+  const wu = lastWU();
+  const wv = e && e.w ? (wu==='g' ? String(Math.round(e.w*1000)) : String(e.w).replace('.',',')) : '';
+  return `<div class="field"><label for="${ids.kg}">${label}</label><div class="money"><span>R$</span><input id="${ids.kg}" data-trio="${key}" inputmode="decimal" placeholder="0,00" autocomplete="off" value="${e&&e.p?esc(money2(e.p)):''}"><span class="suf">/kg</span></div></div>
+    <div class="row2">
+      <div class="field"><label for="${ids.w}">Peso</label><div class="wrow"><input id="${ids.w}" data-trio="${key}" inputmode="decimal" placeholder="${wu==='g'?'500':'0,500'}" autocomplete="off" value="${esc(wv)}"><select id="${ids.wu}" data-trio="${key}" aria-label="Unidade do peso"><option value="kg"${wu==='kg'?' selected':''}>kg</option><option value="g"${wu==='g'?' selected':''}>g</option></select></div></div>
+      <div class="field"><label for="${ids.t}">Total pago</label><div class="money sm"><span>R$</span><input id="${ids.t}" data-trio="${key}" inputmode="decimal" placeholder="0,00" autocomplete="off" value="${e&&e.t?esc(money2(e.t)):''}"></div></div>
+    </div>
+    <p id="${ids.calc}" class="count" style="margin:0">Preencha dois campos (preço do kg, peso ou total) e o app calcula o outro.</p>`;
+}
+function trioVals(key){
+  const ids = TRIOS[key], kgEl = $('#'+ids.kg); if(!kgEl) return null;
+  const wu = $('#'+ids.wu).value, w0 = parseNum($('#'+ids.w).value);
+  return {kg: parseNum(kgEl.value), w: w0==null ? null : (wu==='g' ? w0/1000 : w0), t: parseNum($('#'+ids.t).value), wu};
+}
+function setAuto(id, val){ const el = $('#'+id); if(!el) return; el.value = val; el.dataset.auto = val ? '1' : ''; }
+function trioCalc(key, changedId){
+  const ids = TRIOS[key]; if(!$('#'+ids.kg)) return;
+  const ch = changedId && $('#'+changedId);
+  if(ch && changedId !== ids.wu){ ch.dataset.auto = ''; if(changedId===ids.kg) ids.last='kg'; if(changedId===ids.t) ids.last='t'; }
+  if(changedId === ids.wu){ try{ localStorage.setItem(WU_KEY, $('#'+ids.wu).value); }catch(e){} }
+  const isUser = id => { const el = $('#'+id); return !!(el && el.value && !el.dataset.auto); };
+  let v = trioVals(key);
+  const wText = w => v.wu==='g' ? String(Math.round(w*1000)) : w.toFixed(3).replace('.',',');
+  if(changedId===ids.w || changedId===ids.wu){
+    if(v.w){ if(ids.last==='t' && isUser(ids.t)) setAuto(ids.kg, money2(v.t/v.w)); else if(isUser(ids.kg)) setAuto(ids.t, money2(v.kg*v.w)); else if(isUser(ids.t)) setAuto(ids.kg, money2(v.t/v.w)); }
+  } else if(changedId===ids.kg){
+    if(v.kg && (v.w && (isUser(ids.w)))) setAuto(ids.t, money2(v.kg*v.w));
+    else if(v.kg && isUser(ids.t)) setAuto(ids.w, wText(v.t/v.kg));
+    else if(!v.kg && $('#'+ids.t).dataset.auto) setAuto(ids.t, '');
+  } else if(changedId===ids.t){
+    if(v.t && v.w && isUser(ids.w)) setAuto(ids.kg, money2(v.t/v.w));
+    else if(v.t && isUser(ids.kg)) setAuto(ids.w, wText(v.t/v.kg));
+    else if(!v.t && $('#'+ids.kg).dataset.auto) setAuto(ids.kg, '');
+  }
+  v = trioVals(key);
+  const c = $('#'+ids.calc);
+  if(c){ c.textContent = (v.kg && v.w && v.t) ? `${fmtW(v.w)} × ${fmt(v.kg)}/kg = ${fmt(v.t)}` : 'Preencha dois campos (preço do kg, peso ou total) e o app calcula o outro.'; }
+}
+function readTrio(key){
+  const v = trioVals(key); if(!v) return null;
+  let p = v.kg || (v.t && v.w ? v.t/v.w : null);
+  if(!p) return null;
+  p = Math.round(p*100)/100;
+  const r = {p};
+  if(v.w) r.w = Math.round(v.w*1000)/1000;
+  if(v.t) r.t = Math.round(v.t*100)/100; else if(v.w) r.t = Math.round(p*v.w*100)/100;
+  return r;
+}
+function clearTrio(key){ const ids = TRIOS[key]; [ids.kg, ids.w, ids.t].forEach(id => setAuto(id, '')); ids.last = null; trioCalc(key); }
+function plainPriceHTML(id, label){ return `<div class="field"><label for="${id}">${label}</label><div class="money"><span>R$</span><input id="${id}" inputmode="decimal" placeholder="0,00" autocomplete="off"></div></div>`; }
+document.addEventListener('input', ev => { const k = ev.target.dataset && ev.target.dataset.trio; if(k && TRIOS[k]){ trioCalc(k, ev.target.id); if(k==='cmpPrice') renderCmp(); } });
+document.addEventListener('change', ev => {
+  const k = ev.target.dataset && ev.target.dataset.trio; if(k && TRIOS[k] && ev.target.tagName==='SELECT'){ trioCalc(k, ev.target.id); if(k==='cmpPrice') renderCmp(); }
+  if(ev.target.id==='fByW'){
+    const box = $('#fPriceBox'); const keep = $('#fPrice') ? $('#fPrice').value : '';
+    box.innerHTML = ev.target.checked ? trioHTML('fPrice','Preço do kg') : plainPriceHTML('fPrice','Preço pago');
+    if(keep) $('#fPrice').value = keep;
+  }
+});
 
 /* ---------- Folha: abrir/fechar ---------- */
 let lastFocus = null;
