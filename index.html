@@ -137,7 +137,13 @@ input::placeholder{color:var(--muted);opacity:.8}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .field{display:flex;flex-direction:column;gap:6px}
 .hist{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.hist li{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px dashed var(--line);font-size:14px}
+.row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;cursor:pointer;min-width:0}
+.row-edit:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:6px}
+h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
+.head-btns{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.btn.sm{padding:7px 14px;font-size:14px}
+.btn-col{display:flex;flex-direction:column;gap:8px}
+.hist li{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px dashed var(--line);font-size:14px}
 .hist li:last-child{border-bottom:0}
 .hist .d{font-family:var(--f-mono);color:var(--muted);font-size:13px}
 .hist .s{color:var(--muted);overflow-wrap:anywhere}
@@ -354,7 +360,7 @@ function renderAll(){
   renderList(); renderStores();
   if(view==='detail'){
     if(items.has(openId)) renderDetailParts(); else closeSheet();
-  }
+  } else if((view==='editProduct' || view==='editEntry') && !items.has(openId)) closeSheet();
 }
 
 /* ---------- Folha: detalhe ---------- */
@@ -386,7 +392,7 @@ function openDetail(id){
   $('#sheet').innerHTML = `
     <div class="sheet-head">
       <div><h2 id="sheetTitle">${esc(p.name)}</h2>${p.unit?`<p>${esc(p.unit)}</p>`:''}${p.ean?`<p class="ean">${esc(p.ean)}</p>`:''}</div>
-      <button class="x" type="button" data-close aria-label="Fechar">×</button>
+      <div class="head-btns"><button class="btn sm" type="button" data-edit-prod>Editar</button><button class="x" type="button" data-close aria-label="Fechar">×</button></div>
     </div>
     <div id="dStats" class="stats"></div>
     <section class="slip" aria-label="Comparar com o preço de hoje">
@@ -401,7 +407,7 @@ function openDetail(id){
       <button id="saveBuy" class="btn primary wide" type="button">Registrar esta compra</button>
     </section>
     <div id="dSpark" class="spark"></div>
-    <h3>Histórico</h3>
+    <h3>Histórico <small>· toque numa compra para editar</small></h3>
     <ul id="dHist" class="hist"></ul>
     <button id="delProd" class="btn danger" type="button">Excluir produto</button>`;
   const h = hist(p), last = h[h.length-1];
@@ -424,8 +430,8 @@ function renderDetailParts(){
   $('#dHist').innerHTML = h.slice().reverse().map((e,idx,arr)=>{
     const prev = arr[idx+1];
     const d = prev ? delta(e.p, prev.p) : null;
-    return `<li><span class="d">${fdate(e.d)}</span><span class="s">${esc(e.s||'—')}</span>
-      <span class="p">${fmt(e.p)} ${d?chipFor(d):''}</span>
+    return `<li><button class="row-edit" type="button" data-edit-entry="${e._i}" aria-label="Editar compra de ${fdate(e.d)}"><span class="d">${fdate(e.d)}</span><span class="s">${esc(e.s||'—')}</span>
+      <span class="p">${fmt(e.p)} ${d?chipFor(d):''}</span></button>
       <button class="del" type="button" data-del-entry="${e._i}" aria-label="Apagar compra de ${fdate(e.d)}">×</button></li>`;
   }).join('');
   renderCmp();
@@ -482,7 +488,7 @@ function openAdd(prefill, ean){
     </form>`;
   showSheet();
   if(ean){ const ex=findByEan(ean); if(ex) $('#fErr').textContent=`Esse código já é de “${ex.name}”.`; else autofill(ean); }
-  setTimeout(()=>$('#fName').focus(), 50);
+  setTimeout(()=>{ const i=$('#fName'); if(i) i.focus(); }, 50);
 }
 
 /* ---------- Busca do nome pelo código (bases públicas Open Food Facts) ---------- */
@@ -651,6 +657,7 @@ async function handlePhoto(file){
 }
 function findByEan(code){ return [...items.values()].find(p => p.ean && p.ean===code); }
 function onCode(code){
+  if(scanTarget==='edit' && $('#eEan')){ $('#eEan').value = code; return; }
   if(scanTarget==='form' && $('#fEan')){
     $('#fEan').value = code;
     const ex = findByEan(code);
@@ -825,8 +832,71 @@ function suggestFor(inputId, askLocation){
     if(document.getElementById(inputId)) renderSuggest(inputId, false);
   }, askLocation ? 350 : 0);
 }
-document.addEventListener('focusin', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore') suggestFor(id, false); });
-document.addEventListener('input', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore') suggestFor(id, true); });
+document.addEventListener('focusin', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore' || id==='eeStore') suggestFor(id, false); });
+document.addEventListener('input', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore' || id==='eeStore') suggestFor(id, true); });
+
+
+/* ---------- Editar produto e compras ---------- */
+let editIdx = -1;
+const priceStr = v => String(v).replace('.', ',');
+function openEditProduct(){
+  const p = items.get(openId); if(!p) return;
+  view = 'editProduct';
+  $('#sheet').innerHTML = `
+    <div class="sheet-head"><h2 id="sheetTitle">Editar produto</h2><button class="x" type="button" data-back aria-label="Voltar">×</button></div>
+    <div class="slip">
+      <div class="field"><label for="eName">Produto</label><input id="eName" autocomplete="off" value="${esc(p.name)}"></div>
+      <div class="field"><label for="eUnit">Tamanho / unidade (opcional)</label><input id="eUnit" autocomplete="off" placeholder="Ex.: 5 kg, lata 350 ml" value="${esc(p.unit||'')}"></div>
+      <div class="field"><label for="eEan">Código de barras (opcional)</label>
+        <div class="ean-row"><input id="eEan" inputmode="numeric" autocomplete="off" placeholder="7891234567890" value="${esc(p.ean||'')}"><button class="btn" type="button" data-scan-edit>Ler</button></div></div>
+      <p id="eErr" class="err"></p>
+      <div class="btn-col">
+        <button id="saveEditProd" class="btn primary wide" type="button">Salvar alterações</button>
+        <button class="btn wide" type="button" data-back>Cancelar</button>
+      </div>
+    </div>`;
+  setTimeout(()=>{ const i=$('#eName'); if(i) i.focus(); }, 50);
+}
+function saveEditProduct(){
+  const p = items.get(openId); if(!p) return;
+  const name = $('#eName').value.trim(), unit = $('#eUnit').value.trim(), ean = $('#eEan').value.replace(/\s/g,'');
+  if(!name){ $('#eErr').textContent = 'Dê um nome ao produto.'; $('#eName').focus(); return; }
+  if(ean){ const other = [...items.values()].find(x => x.id!==p.id && x.ean===ean); if(other){ $('#eErr').textContent = `Esse código já é de “${other.name}”.`; return; } }
+  const np = {...p, name, unit, updated:Date.now()};
+  if(ean) np.ean = ean; else delete np.ean;
+  persist(np);
+  toast('Produto atualizado');
+  openDetail(p.id);
+}
+function openEditEntry(i){
+  const p = items.get(openId); if(!p || !p.entries || !p.entries[i]) return;
+  const e = p.entries[i];
+  view = 'editEntry'; editIdx = i;
+  $('#sheet').innerHTML = `
+    <div class="sheet-head"><div><h2 id="sheetTitle">Editar compra</h2><p>${esc(p.name)}</p></div><button class="x" type="button" data-back aria-label="Voltar">×</button></div>
+    <div class="slip">
+      <div class="field"><label for="eePrice">Preço pago</label><div class="money"><span>R$</span><input id="eePrice" inputmode="decimal" autocomplete="off" value="${esc(priceStr(e.p))}"></div></div>
+      <div class="field"><label for="eeStore">Onde</label>
+        <div class="ean-row"><input id="eeStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(e.s||'')}"><button class="btn" type="button" data-near="eeStore">📍 Perto</button></div>
+        <div class="near" data-near-out="eeStore" aria-live="polite"></div></div>
+      <div class="field"><label for="eeDate">Data</label><input id="eeDate" type="date" value="${esc(e.d||today())}"></div>
+      <p id="eeErr" class="err"></p>
+      <div class="btn-col">
+        <button id="saveEditEntry" class="btn primary wide" type="button">Salvar alterações</button>
+        <button class="btn wide" type="button" data-back>Cancelar</button>
+        <button id="delEditEntry" class="btn danger wide" type="button">Apagar esta compra</button>
+      </div>
+    </div>`;
+}
+function saveEditEntry(){
+  const p = items.get(openId); if(!p || !p.entries || !p.entries[editIdx]) return;
+  const v = parsePrice($('#eePrice').value);
+  if(v===null){ $('#eeErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#eePrice').focus(); return; }
+  const ne = {p:v, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()};
+  persist({...p, entries: p.entries.map((x,k)=> k===editIdx ? ne : x), updated:Date.now()});
+  toast('Compra atualizada');
+  openDetail(p.id);
+}
 
 /* ---------- Folha: abrir/fechar ---------- */
 let lastFocus = null;
@@ -844,6 +914,18 @@ document.addEventListener('click', ev=>{
   if(t.closest('[data-close]') || t === $('#overlay')){ closeSheet(); return; }
   const s = t.closest('[data-sort]');
   if(s){ sortBy = s.dataset.sort; document.querySelectorAll('[data-sort]').forEach(b=>b.setAttribute('aria-pressed', b===s?'true':'false')); renderList(); return; }
+  if(t.closest('[data-edit-prod]')){ openEditProduct(); return; }
+  const ee = t.closest('[data-edit-entry]'); if(ee){ openEditEntry(+ee.dataset.editEntry); return; }
+  if(t.closest('[data-back]')){ openDetail(openId); return; }
+  if(t.closest('#saveEditProd')){ saveEditProduct(); return; }
+  if(t.closest('#saveEditEntry')){ saveEditEntry(); return; }
+  const dee = t.closest('#delEditEntry');
+  if(dee){
+    if(dee.dataset.armed){ const p=items.get(openId); persist({...p, entries:(p.entries||[]).filter((_,k)=>k!==editIdx), updated:Date.now()}); toast('Compra apagada'); openDetail(p.id); }
+    else { dee.dataset.armed='1'; dee.textContent='Toque de novo para apagar'; setTimeout(()=>{ if(dee.isConnected){ delete dee.dataset.armed; dee.textContent='Apagar esta compra'; } },3000); }
+    return;
+  }
+  if(t.closest('[data-scan-edit]')){ startScan('edit'); return; }
   if(t.closest('#saveBuy')){ saveBuy(); return; }
   if(t.closest('#expBtn')){ exportBackup(); return; }
   const nb = t.closest('[data-near]'); if(nb){ findNear(nb.dataset.near); return; }
@@ -878,7 +960,7 @@ document.addEventListener('change', ev=>{
 document.addEventListener('submit', ev=>{ if(ev.target.id==='addForm') submitAdd(ev); });
 document.addEventListener('keydown', ev=>{
   if(ev.key==='Escape' && !$('#cam').hidden){ stopCam(); return; }
-  if(ev.key==='Escape' && !$('#overlay').hidden) closeSheet();
+  if(ev.key==='Escape' && !$('#overlay').hidden){ if(view==='editProduct' || view==='editEntry') openDetail(openId); else closeSheet(); }
   if(ev.key==='Enter' && ev.target.id==='cmpPrice'){ ev.preventDefault(); saveBuy(); }
 });
 
