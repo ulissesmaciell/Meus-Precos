@@ -67,6 +67,11 @@ h3{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .cam .frame{position:absolute;left:10%;right:10%;top:38%;height:22%;border:3px solid #fff;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
 .cam .frame::after{content:"";position:absolute;left:6%;right:6%;top:50%;border-top:2px solid #ff5a4a;opacity:.9}
 .cam .hint{position:absolute;top:24px;left:16px;right:16px;text-align:center;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.cam .hint{display:flex;align-items:center;justify-content:center;gap:8px}
+.pulse{display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff5a4a;animation:pulse 1s ease-in-out infinite}
+.pulse.ok{background:#4fd18f;animation:none}
+@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
 .cam-msg{position:absolute;left:16px;right:16px;top:64px;background:rgba(0,0,0,.8);color:#fff;padding:14px 16px;border-radius:12px;font-size:15px;line-height:1.4;margin:0}
 .cam-msg[hidden]{display:none}
 .cam .bar{display:flex;gap:10px;padding:16px;justify-content:center;background:#000}
@@ -217,7 +222,7 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 <div id="cam" class="cam" hidden role="dialog" aria-label="Leitor de código de barras">
   <video id="camVideo" playsinline muted autoplay></video>
   <div class="frame"></div>
-  <p class="hint">Aponte para o código de barras</p>
+  <p class="hint" id="camHint" aria-live="polite"><span class="pulse" aria-hidden="true"></span> <span id="camHintText">Abrindo a câmera…</span></p>
   <p id="camMsg" class="cam-msg" hidden role="alert"></p>
   <div class="bar">
     <button id="camPhoto" class="btn" type="button">Usar foto</button>
@@ -588,7 +593,17 @@ function submitAdd(ev){
 
 /* ---------- Código de barras: câmera ao vivo, com foto como alternativa ---------- */
 let scanTarget = 'global', zxingP = null, camStream = null, camReader = null, camTimer = null, camOn = false;
-const FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128'];
+const FORMATS = ['ean_13','ean_8','upc_a'];
+// Confere o dígito verificador (EAN-8, UPC-A, EAN-13, GTIN-14)
+function validGTIN(code){
+  if(!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
+  const d = code.split('').map(Number), check = d.pop();
+  const sum = d.reverse().reduce((s, x, i) => s + x * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - sum % 10) % 10 === check;
+}
+// UPC-A (12 dígitos) é o mesmo código que o EAN-13 com um 0 na frente
+const sameCode = (a, b) => String(a||'').replace(/^0+/,'') === String(b||'').replace(/^0+/,'');
+const READS_NEEDED = 3;
 function loadZXing(){
   if(window.ZXing) return Promise.resolve(window.ZXing);
   if(!zxingP) zxingP = new Promise((res,rej)=>{
@@ -601,7 +616,7 @@ function loadZXing(){
 function zxHints(Z){
   const h = new Map();
   h.set(Z.DecodeHintType.TRY_HARDER, true);
-  h.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128]);
+  h.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A]);
   return h;
 }
 async function hasNativeDetector(){
@@ -617,9 +632,19 @@ function stopCam(){
   $('#cam').hidden = true;
 }
 function camMessage(html){ const m=$('#camMsg'); m.innerHTML = html || ''; m.hidden = !html; }
+function camHint(text, ok){ const t = $('#camHintText'); if(t) t.textContent = text; const pl = document.querySelector('#camHint .pulse'); if(pl) pl.classList.toggle('ok', !!ok); }
+let readLast = null, readCount = 0;
+function candidate(raw){
+  const code = String(raw||'').trim();
+  if(!validGTIN(code)){ camHint('Lendo código… aproxime ou afaste um pouco'); return; }
+  if(code === readLast) readCount++; else { readLast = code; readCount = 1; }
+  if(readCount >= READS_NEEDED){ camHint('Código lido: ' + code, true); const c = code; setTimeout(()=>gotCode(c), 350); camOn = false; clearTimeout(camTimer); }
+  else camHint(`Conferindo o código… ${readCount}/${READS_NEEDED}`);
+}
 async function startScan(target){
   scanTarget = target;
   $('#cam').hidden = false; camOn = true; camMessage('');
+  readLast = null; readCount = 0; camHint('Abrindo a câmera…');
   const v = $('#camVideo');
   v.setAttribute('playsinline',''); v.setAttribute('muted',''); v.muted = true;
   if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
@@ -627,7 +652,8 @@ async function startScan(target){
   }
   // 1) Pede a câmera primeiro, ainda no toque do botão (o iPhone exige isso)
   try{
-    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}, audio:false});
+    try{ const tr = camStream.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {}; if(cap.focusMode && cap.focusMode.includes('continuous')) await tr.applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){}
   }catch(e){
     const n = e && e.name;
     camMessage(n==='NotAllowedError'
@@ -638,21 +664,22 @@ async function startScan(target){
   }
   if(!camOn){ stopCam(); return; }
   try{ v.srcObject = camStream; await v.play(); }catch(e){}
+  camHint('Lendo código… aponte para o código de barras');
   // 2) Depois liga o leitor
   try{
     if(await hasNativeDetector()){
       const det = new BarcodeDetector({formats:FORMATS});
       const tick = async () => {
         if(!camOn) return;
-        try{ const r = await det.detect(v); if(r && r[0] && r[0].rawValue){ gotCode(r[0].rawValue); return; } }catch(e){}
-        camTimer = setTimeout(tick, 150);
+        try{ const r = await det.detect(v); if(r && r[0] && r[0].rawValue) candidate(r[0].rawValue); }catch(e){}
+        if(camOn) camTimer = setTimeout(tick, 120);
       };
       tick();
     } else {
       const Z = await loadZXing();
       if(!camOn) return;
-      camReader = new Z.BrowserMultiFormatReader(zxHints(Z), 200);
-      await camReader.decodeFromStream(camStream, v, (res)=>{ if(res && camOn) gotCode(res.getText()); });
+      camReader = new Z.BrowserMultiFormatReader(zxHints(Z), 120);
+      await camReader.decodeFromStream(camStream, v, (res)=>{ if(res && camOn) candidate(res.getText()); });
     }
   }catch(e){
     camMessage('A câmera abriu, mas o leitor não carregou' + (e&&e.name?` (${esc(e.name)})`:'') + '. Toque em <b>Usar foto</b>.');
@@ -662,6 +689,7 @@ async function startScan(target){
 window.addEventListener('load', ()=>{ setTimeout(async ()=>{ if(!(await hasNativeDetector())) loadZXing().catch(()=>{}); }, 1500); });
 function gotCode(code){
   stopCam();
+  toast('Código lido: ' + code);
   try{ navigator.vibrate && navigator.vibrate(60); }catch(e){}
   onCode(String(code).trim());
 }
@@ -691,10 +719,11 @@ async function handlePhoto(file){
   let code = null;
   try{ code = String(await decodePhoto(file)).trim(); }catch(e){}
   $('#scanWait').hidden = true;
-  if(!code){ toast('Não consegui ler. Tente uma foto mais de perto e bem iluminada.'); return; }
+  if(!code || !validGTIN(code)){ toast('Não consegui ler com certeza. Tente uma foto mais de perto, reta e bem iluminada.'); return; }
+  toast('Código lido: ' + code);
   onCode(code);
 }
-function findByEan(code){ return [...items.values()].find(p => p.ean && p.ean===code); }
+function findByEan(code){ return [...items.values()].find(p => p.ean && sameCode(p.ean, code)); }
 function onCode(code){
   if(scanTarget==='edit' && $('#eEan')){ $('#eEan').value = code; return; }
   if(scanTarget==='form' && $('#fEan')){
