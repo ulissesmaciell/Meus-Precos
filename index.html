@@ -806,7 +806,7 @@ async function fetchNearby(lat, lon){
   learnedPlaces().forEach(p => addPlace(out, seen, lat, lon, p.name, p.lat, p.lon, 1000, p.type));
   // Qualquer lugar com nome: lojas, restaurantes, serviços, saúde, lazer, hotéis, escritórios
   const A = `(around:1000,${lat},${lon})`;
-  const q = `[out:json][timeout:20];(nwr["shop"]["name"]${A};nwr["amenity"]["name"]${A};nwr["leisure"]["name"]${A};nwr["tourism"]["name"]${A};nwr["healthcare"]["name"]${A};nwr["craft"]["name"]${A};nwr["office"]["name"]${A};);out center tags 600;`;
+  const q = `[out:json][timeout:20];(nwr["shop"]["name"]${A};nwr["shop"]["brand"][!"name"]${A};nwr["amenity"]["brand"][!"name"]${A};nwr["amenity"]["name"]${A};nwr["leisure"]["name"]${A};nwr["tourism"]["name"]${A};nwr["healthcare"]["name"]${A};nwr["craft"]["name"]${A};nwr["office"]["name"]${A};);out center tags 600;`;
   const mirrors = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.private.coffee/api/interpreter'];
   let got = false;
   try{
@@ -860,7 +860,7 @@ async function findNear(inputId){
   try{
     const list = await ensureNearby();
     if(!document.body.contains(out)) return;
-    out.innerHTML = list.length ? list.slice(0,10).map(m=>chip(inputId,m.name,m.d,m.type)).join('')
+    out.innerHTML = list.length ? list.slice(0,20).map(m=>chip(inputId,m.name,m.d,m.type)).join('')
       : '<span class="count">Não achei lugares no mapa por aqui. Digite o nome.</span>';
   }catch(e){ if(document.body.contains(out)) out.innerHTML = `<span class="count">${nearError(e)}</span>`; }
 }
@@ -870,6 +870,25 @@ function savedStores(){
   items.forEach(p => (p.entries||[]).forEach(e => { if(e.s){ const k=norm(e.s); const o=m.get(k)||{name:e.s,n:0,last:''}; o.n++; if(e.d>o.last) o.last=e.d; m.set(k,o); } }));
   return [...m.values()].sort((a,b)=> b.last.localeCompare(a.last) || b.n-a.n);
 }
+const nameCache = {}, namePending = {};
+async function searchByName(q){
+  if(!nearCache || q in nameCache || namePending[q]) return;
+  namePending[q] = true;
+  const {lat, lon} = nearCache;
+  try{
+    const j = await timedFetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lat=${lat}&lon=${lon}&limit=20`, 9000);
+    const out = [], seen = new Map();
+    (j.features||[]).forEach(f => {
+      const p = f.properties||{}, c = f.geometry && f.geometry.coordinates;
+      if(!c || !/^(shop|amenity|leisure|tourism|healthcare|craft|office)$/.test(p.osm_key) || NOISE.test(p.osm_value)) return;
+      addPlace(out, seen, lat, lon, p.name, c[1], c[0], 5000, SHOP_PT[p.osm_value]||'');
+    });
+    nameCache[q] = out.sort((a,b)=>a.d-b.d).slice(0,6);
+  }catch(e){ nameCache[q] = []; }
+  delete namePending[q];
+  ['fStore','cmpStore','eeStore'].forEach(id => { const el = document.getElementById(id); if(el && norm(el.value)===q) renderSuggest(id, false); });
+}
+let nameT = null;
 function renderSuggest(inputId, loading){
   const inp = document.getElementById(inputId), out = document.querySelector(`[data-near-out="${inputId}"]`);
   if(!inp || !out) return;
@@ -877,10 +896,17 @@ function renderSuggest(inputId, loading){
   const near = nearCache ? nearCache.list : [];
   const used = new Set(), picks = [];
   near.filter(m => !q || norm(m.name).includes(q) || norm(m.type).includes(q)).slice(0, q ? 6 : 5).forEach(m => { used.add(norm(m.name)); picks.push([m.name, m.d, m.type]); });
-  if(q) savedStores().filter(s => norm(s.name).includes(q) && !used.has(norm(s.name))).slice(0,4).forEach(s => picks.push([s.name, null]));
+  if(q) savedStores().filter(s => norm(s.name).includes(q) && !used.has(norm(s.name))).slice(0,4).forEach(s => { used.add(norm(s.name)); picks.push([s.name, null]); });
+  // poucos resultados perto: procura o nome digitado num raio de até 5 km
+  let nameLoading = false;
+  if(q.length >= 3 && picks.length < 3 && nearCache){
+    if(nameCache[q]) nameCache[q].forEach(m => { if(!used.has(norm(m.name))){ used.add(norm(m.name)); picks.push([m.name, m.d, m.type]); } });
+    else { nameLoading = true; clearTimeout(nameT); nameT = setTimeout(()=>searchByName(q), 450); }
+  }
   // já digitou exatamente o único nome sugerido: não precisa sugerir
   let html = (picks.length===1 && norm(picks[0][0])===q) ? '' : picks.map(([n,d,t]) => chip(inputId, n, d, t)).join('');
   if(loading && !nearFresh()) html += '<span class="count">procurando perto…</span>';
+  else if(nameLoading) html += `<span class="count">procurando “${esc(inp.value.trim())}” na região…</span>`;
   out.innerHTML = html;
 }
 let suggestT = null, geoGranted = null, nearFailT = 0;
