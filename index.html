@@ -64,14 +64,23 @@ h3{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .scan-wait[hidden],.cam[hidden]{display:none}
 .cam{position:fixed;inset:0;background:#000;z-index:40;display:flex;flex-direction:column}
 .cam video{flex:1;width:100%;min-height:0;object-fit:cover}
-.cam .frame{position:absolute;left:10%;right:10%;top:38%;height:22%;border:3px solid #fff;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
-.cam .frame::after{content:"";position:absolute;left:6%;right:6%;top:50%;border-top:2px solid #ff5a4a;opacity:.9}
-.cam .hint{position:absolute;top:24px;left:16px;right:16px;text-align:center;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-.cam .hint{display:flex;align-items:center;justify-content:center;gap:8px}
-.pulse{display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff5a4a;animation:pulse 1s ease-in-out infinite}
-.pulse.ok{background:#4fd18f;animation:none}
-@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
-@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
+.cam .frame{position:absolute;left:6%;right:6%;top:34%;height:24%;border:4px solid #fff;border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none;transition:border-color .15s, box-shadow .15s}
+.cam .laser{position:absolute;left:5%;right:5%;height:3px;border-radius:2px;background:#ff3b30;box-shadow:0 0 12px 3px rgba(255,59,48,.75);top:10%;animation:laser 1.4s ease-in-out infinite alternate}
+@keyframes laser{from{top:10%}to{top:88%}}
+.cam.scanning .frame{animation:glow 1.2s ease-in-out infinite}
+@keyframes glow{0%,100%{border-color:#fff}50%{border-color:#9fd3ff}}
+.cam.found .frame{border-color:#ffcc00;animation:none;box-shadow:0 0 0 9999px rgba(0,0,0,.45),0 0 24px 6px rgba(255,204,0,.6)}
+.cam.found .laser{background:#ffcc00;box-shadow:0 0 12px 3px rgba(255,204,0,.8)}
+.cam.done .frame{border-color:#34c759;border-width:6px;animation:none;box-shadow:0 0 0 9999px rgba(0,0,0,.45),0 0 32px 10px rgba(52,199,89,.75)}
+.cam.done .laser{display:none}
+.cam.done::after{content:"";position:absolute;inset:0;background:rgba(52,199,89,.28);pointer-events:none;animation:flash .45s ease-out forwards}
+@keyframes flash{from{opacity:1}to{opacity:0}}
+.cam .caption{position:absolute;left:12px;right:12px;top:calc(34% - 84px);display:flex;justify-content:center;pointer-events:none}
+.cam .caption span{background:rgba(0,0,0,.72);color:#fff;font-size:22px;font-weight:700;line-height:1.25;padding:12px 20px;border-radius:999px;text-align:center;font-family:var(--f-body)}
+.cam.found .caption span{background:#ffcc00;color:#1a1a1a}
+.cam.done .caption span{background:#34c759;color:#06210f;font-size:24px}
+.cam .tip{position:absolute;left:16px;right:16px;top:calc(58% + 18px);margin:0;text-align:center;color:#fff;font-size:17px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+@media (prefers-reduced-motion: reduce){.cam .laser,.cam.scanning .frame{animation:none}.cam .laser{top:50%}}
 .cam-msg{position:absolute;left:16px;right:16px;top:64px;background:rgba(0,0,0,.8);color:#fff;padding:14px 16px;border-radius:12px;font-size:15px;line-height:1.4;margin:0}
 .cam-msg[hidden]{display:none}
 .cam .bar{display:flex;gap:10px;padding:16px;justify-content:center;background:#000}
@@ -221,8 +230,9 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 <div id="scanWait" class="scan-wait" hidden>Lendo o código…</div>
 <div id="cam" class="cam" hidden role="dialog" aria-label="Leitor de código de barras">
   <video id="camVideo" playsinline muted autoplay></video>
-  <div class="frame"></div>
-  <p class="hint" id="camHint" aria-live="polite"><span class="pulse" aria-hidden="true"></span> <span id="camHintText">Abrindo a câmera…</span></p>
+  <div class="frame"><div class="laser"></div></div>
+  <div class="caption" aria-live="polite"><span id="camHintText">Abrindo a câmera…</span></div>
+  <p class="tip" id="camTip">Deixe o código dentro da moldura</p>
   <p id="camMsg" class="cam-msg" hidden role="alert"></p>
   <div class="bar">
     <button id="camPhoto" class="btn" type="button">Usar foto</button>
@@ -603,7 +613,7 @@ function validGTIN(code){
 }
 // UPC-A (12 dígitos) é o mesmo código que o EAN-13 com um 0 na frente
 const sameCode = (a, b) => String(a||'').replace(/^0+/,'') === String(b||'').replace(/^0+/,'');
-const READS_NEEDED = 3;
+const READS_NEEDED = 2;
 function loadZXing(){
   if(window.ZXing) return Promise.resolve(window.ZXing);
   if(!zxingP) zxingP = new Promise((res,rej)=>{
@@ -632,19 +642,28 @@ function stopCam(){
   $('#cam').hidden = true;
 }
 function camMessage(html){ const m=$('#camMsg'); m.innerHTML = html || ''; m.hidden = !html; }
-function camHint(text, ok){ const t = $('#camHintText'); if(t) t.textContent = text; const pl = document.querySelector('#camHint .pulse'); if(pl) pl.classList.toggle('ok', !!ok); }
+function camState(st){ const c = $('#cam'); c.classList.remove('scanning','found','done'); if(st) c.classList.add(st); }
+function camHint(text, ok){ const t = $('#camHintText'); if(t) t.textContent = text; if(ok) camState('done'); }
+let foundT = null;
 let readLast = null, readCount = 0;
 function candidate(raw){
   const code = String(raw||'').trim();
-  if(!validGTIN(code)){ camHint('Lendo código… aproxime ou afaste um pouco'); return; }
+  if(!validGTIN(code)) return;
   if(code === readLast) readCount++; else { readLast = code; readCount = 1; }
-  if(readCount >= READS_NEEDED){ camHint('Código lido: ' + code, true); const c = code; setTimeout(()=>gotCode(c), 350); camOn = false; clearTimeout(camTimer); }
-  else camHint(`Conferindo o código… ${readCount}/${READS_NEEDED}`);
+  if(readCount >= READS_NEEDED){
+    camOn = false; clearTimeout(camTimer); clearTimeout(foundT);
+    camHint('✓ ' + code, true); $('#camTip').textContent = 'Código lido!';
+    try{ navigator.vibrate && navigator.vibrate([40,40,90]); }catch(e){}
+    const c = code; setTimeout(()=>gotCode(c), 550);
+  } else {
+    camState('found'); $('#camHintText').textContent = 'Código encontrado…';
+    clearTimeout(foundT); foundT = setTimeout(()=>{ if(camOn){ camState('scanning'); $('#camHintText').textContent = 'Lendo código…'; readCount = 0; } }, 900);
+  }
 }
 async function startScan(target){
   scanTarget = target;
   $('#cam').hidden = false; camOn = true; camMessage('');
-  readLast = null; readCount = 0; camHint('Abrindo a câmera…');
+  readLast = null; readCount = 0; camState(''); camHint('Abrindo a câmera…'); $('#camTip').textContent = 'Deixe o código dentro da moldura';
   const v = $('#camVideo');
   v.setAttribute('playsinline',''); v.setAttribute('muted',''); v.muted = true;
   if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
@@ -652,7 +671,7 @@ async function startScan(target){
   }
   // 1) Pede a câmera primeiro, ainda no toque do botão (o iPhone exige isso)
   try{
-    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}, audio:false});
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false});
     try{ const tr = camStream.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {}; if(cap.focusMode && cap.focusMode.includes('continuous')) await tr.applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){}
   }catch(e){
     const n = e && e.name;
@@ -664,7 +683,7 @@ async function startScan(target){
   }
   if(!camOn){ stopCam(); return; }
   try{ v.srcObject = camStream; await v.play(); }catch(e){}
-  camHint('Lendo código… aponte para o código de barras');
+  camState('scanning'); camHint('Lendo código…');
   // 2) Depois liga o leitor
   try{
     if(await hasNativeDetector()){
@@ -672,14 +691,37 @@ async function startScan(target){
       const tick = async () => {
         if(!camOn) return;
         try{ const r = await det.detect(v); if(r && r[0] && r[0].rawValue) candidate(r[0].rawValue); }catch(e){}
-        if(camOn) camTimer = setTimeout(tick, 120);
+        if(camOn) camTimer = setTimeout(tick, 60);
       };
       tick();
     } else {
       const Z = await loadZXing();
       if(!camOn) return;
-      camReader = new Z.BrowserMultiFormatReader(zxHints(Z), 120);
-      await camReader.decodeFromStream(camStream, v, (res)=>{ if(res && camOn) candidate(res.getText()); });
+      // Lê só a faixa da moldura, na resolução da câmera, sem o modo pesado: bem mais rápido
+      const hints = new Map(); hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A]);
+      const rd = new Z.MultiFormatReader(); rd.setHints(hints);
+      const cv = document.createElement('canvas'), ctx = cv.getContext('2d', {willReadFrequently:true});
+      const frameEl = document.querySelector('#cam .frame');
+      const loop = () => {
+        if(!camOn) return;
+        const vw = v.videoWidth, vh = v.videoHeight;
+        if(vw && vh){
+          const vr = v.getBoundingClientRect(), fr = frameEl.getBoundingClientRect();
+          const sc = Math.max(vr.width / vw, vr.height / vh), ox = (vr.width - vw*sc) / 2, oy = (vr.height - vh*sc) / 2;
+          const padY = fr.height * 0.25;
+          let x = (fr.left - vr.left - ox) / sc, y = (fr.top - vr.top - padY - oy) / sc, w = fr.width / sc, h = (fr.height + 2*padY) / sc;
+          x = Math.max(0, x); y = Math.max(0, y); w = Math.min(vw - x, w); h = Math.min(vh - y, h);
+          const k = Math.min(1, 1280 / w);
+          cv.width = Math.round(w*k); cv.height = Math.round(h*k);
+          ctx.drawImage(v, x, y, w, h, 0, 0, cv.width, cv.height);
+          try{
+            const res = rd.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv))));
+            candidate(res.getText());
+          }catch(e){}
+        }
+        if(camOn) camTimer = setTimeout(loop, 50);
+      };
+      loop();
     }
   }catch(e){
     camMessage('A câmera abriu, mas o leitor não carregou' + (e&&e.name?` (${esc(e.name)})`:'') + '. Toque em <b>Usar foto</b>.');

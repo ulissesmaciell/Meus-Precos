@@ -1,5 +1,5 @@
 // Guarda o app no aparelho para abrir sem internet
-const CACHE = 'meus-precos-v14';
+const CACHE = 'meus-precos-v15';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'zxing.min.js'];
 
 self.addEventListener('install', e => {
