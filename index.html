@@ -421,7 +421,12 @@ function renderList(){
     </div>`;
     return;
   }
-  if(q) arr = arr.filter(p => (p.name||'').toLowerCase().includes(q) || (p.unit||'').toLowerCase().includes(q) || (p.ean||'').includes(q));
+  if(q){
+    // ignora acentos e maiúsculas; cada palavra digitada precisa aparecer (em qualquer ordem)
+    const strip = x => String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const words = strip(q).split(/\s+/).filter(Boolean);
+    arr = arr.filter(p => { const hay = strip([p.name, p.unit, p.ean].filter(Boolean).join(' ')); return words.every(w => hay.includes(w)); });
+  }
   const lastOf = p => { const h=hist(p); return h.length ? h[h.length-1].d : ''; };
   arr.sort(sortBy==='az'
     ? (a,b)=> (a.name||'').localeCompare(b.name||'','pt-BR')
