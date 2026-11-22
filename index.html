@@ -205,6 +205,7 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 .err{color:var(--up);font-size:13px;min-height:1em;margin:0}
 body.in-claude #expBtn,body.in-claude .site-only{display:none}
 body:not(.in-claude) .claude-only{display:none}
+.bk-text{font:12px/1.4 var(--f-mono);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%;min-height:180px;resize:vertical}
 .backup{display:flex;flex-direction:column;gap:10px;padding-top:8px;border-top:1px dashed var(--line)}
 .backup p{margin:0;font-size:13px;color:var(--muted)}
 .backup-btns{display:flex;gap:8px;flex-wrap:wrap}
@@ -238,10 +239,12 @@ body:not(.in-claude) .claude-only{display:none}
   <main id="list"></main>
   <footer class="backup">
     <p class="site-only">Os dados ficam só neste aparelho. Faça backup de vez em quando.</p>
-    <p class="claude-only">Os dados ficam salvos na sua conta Claude. Dá pra trazer um backup do app do celular com <b>Restaurar backup</b>.</p>
+    <p class="claude-only">Os dados ficam salvos na sua conta Claude. Para levar ou trazer do app do celular, use <b>Copiar backup</b> num e <b>Colar backup</b> no outro.</p>
     <div class="backup-btns">
       <button id="expBtn" class="btn" type="button">Fazer backup</button>
       <button id="impBtn" class="btn" type="button">Restaurar backup</button>
+      <button id="copyBkBtn" class="btn" type="button">Copiar backup</button>
+      <button id="pasteBkBtn" class="btn" type="button">Colar backup</button>
       <input id="impFile" type="file" accept="application/json,.json" hidden>
     </div>
   </footer>
@@ -361,9 +364,12 @@ async function init(){
 }
 
 /* ---------- Backup ---------- */
-function exportBackup(){
+function backupText(){
   const o={}; items.forEach((v,k)=>{ const {id,...b}=v; o[k]=b; });
-  const blob = new Blob([JSON.stringify({app:'meus-precos',v:1,exported:new Date().toISOString(),products:o},null,1)],{type:'application/json'});
+  return JSON.stringify({app:'meus-precos',v:1,exported:new Date().toISOString(),products:o});
+}
+function exportBackup(){
+  const blob = new Blob([backupText()],{type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'meus-precos-backup-'+today()+'.json';
@@ -371,28 +377,61 @@ function exportBackup(){
   setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
   toast('Backup baixado');
 }
+// Junta um backup com o que já existe (sem apagar nem duplicar compras). Devolve quantos produtos vieram, ou null se o texto não for um backup.
+function importBackupText(text){
+  let data; try{ data = JSON.parse(String(text||'').trim()); }catch(e){ return null; }
+  const prods = data && data.products;
+  if(!prods || typeof prods!=='object') return null;
+  let n=0;
+  Object.entries(prods).forEach(([k,v])=>{
+    if(!v || !v.name || !Array.isArray(v.entries)) return;
+    const cur = items.get(k);
+    if(cur){
+      const seen = new Set((cur.entries||[]).map(e=>e.d+'|'+e.p+'|'+(e.s||'')));
+      const add = v.entries.filter(e=>!seen.has(e.d+'|'+e.p+'|'+(e.s||'')));
+      if(add.length) persist({...cur, entries:[...(cur.entries||[]),...add], updated:Date.now()});
+    } else persist({...v,id:k});
+    n++;
+  });
+  renderAll();
+  return n;
+}
 function importBackup(file){
   const r = new FileReader();
-  r.onload = () => {
-    try{
-      const data = JSON.parse(r.result);
-      const prods = data && data.products;
-      if(!prods || typeof prods!=='object') throw 0;
-      let n=0;
-      Object.entries(prods).forEach(([k,v])=>{
-        if(!v || !v.name || !Array.isArray(v.entries)) return;
-        const cur = items.get(k);
-        if(cur){
-          const seen = new Set(cur.entries.map(e=>e.d+'|'+e.p+'|'+(e.s||'')));
-          const add = v.entries.filter(e=>!seen.has(e.d+'|'+e.p+'|'+(e.s||'')));
-          if(add.length) persist({...cur, entries:[...cur.entries,...add], updated:Date.now()});
-        } else persist({...v,id:k});
-        n++;
-      });
-      renderAll(); toast(n+' produtos restaurados');
-    }catch(e){ toast('Arquivo de backup inválido'); }
-  };
+  r.onload = () => { const n = importBackupText(r.result); toast(n==null ? 'Arquivo de backup inválido' : n+' produtos restaurados'); };
   r.readAsText(file);
+}
+// Copiar e colar: leva os dados entre o app do site e o artefato do Claude sem arquivo
+async function copyBackup(){
+  if(!items.size){ toast('Ainda não há produtos para copiar'); return; }
+  const txt = backupText();
+  try{ await navigator.clipboard.writeText(txt); toast(`Backup copiado (${items.size} produtos). Agora toque em Colar backup no outro app.`); return; }catch(e){}
+  // se o celular não deixar copiar direto, mostra o texto pronto pra copiar à mão
+  view = 'copyBackup'; openId = null;
+  $('#sheet').innerHTML = `
+    <div class="sheet-head"><div><h2 id="sheetTitle">Copiar backup</h2><p>Toque no texto, selecione tudo e copie.</p></div><button class="x" type="button" data-close aria-label="Fechar">×</button></div>
+    <textarea id="bkText" class="bk-text" readonly aria-label="Texto do backup">${esc(txt)}</textarea>
+    <button class="btn wide" type="button" data-close>Pronto</button>`;
+  showSheet();
+  setTimeout(()=>{ const t=$('#bkText'); if(t){ t.focus(); t.select(); } }, 80);
+}
+function openPasteBackup(){
+  view = 'pasteBackup'; openId = null;
+  $('#sheet').innerHTML = `
+    <div class="sheet-head"><div><h2 id="sheetTitle">Colar backup</h2><p>No outro app, toque em <b>Copiar backup</b>. Depois cole aqui.</p></div><button class="x" type="button" data-close aria-label="Fechar">×</button></div>
+    <textarea id="bkPaste" class="bk-text" placeholder="Toque e segure aqui, depois escolha Colar" aria-label="Cole o backup aqui"></textarea>
+    <p id="bkErr" class="err"></p>
+    <div class="btn-col">
+      <button id="bkDoPaste" class="btn primary wide" type="button">Restaurar</button>
+      <button class="btn wide" type="button" data-close>Cancelar</button>
+    </div>`;
+  showSheet();
+  setTimeout(()=>{ const t=$('#bkPaste'); if(t) t.focus(); }, 80);
+}
+function doPasteBackup(){
+  const n = importBackupText($('#bkPaste').value);
+  if(n==null){ $('#bkErr').textContent = 'Isso não parece um backup do Meus Preços. Copie de novo no outro app e cole aqui.'; return; }
+  closeSheet(); toast(n+' produtos restaurados');
 }
 
 /* ---------- Lista ---------- */
@@ -1702,6 +1741,9 @@ document.addEventListener('click', ev=>{
   if(t.closest('#camClose')){ stopCam(); return; }
   if(t.closest('#camPhoto')){ stopCam(); $('#scanFile').click(); return; }
   if(t.closest('#impBtn')){ $('#impFile').click(); return; }
+  if(t.closest('#copyBkBtn')){ copyBackup(); return; }
+  if(t.closest('#pasteBkBtn')){ openPasteBackup(); return; }
+  if(t.closest('#bkDoPaste')){ doPasteBackup(); return; }
   const de = t.closest('[data-del-entry]');
   if(de){
     if(de.dataset.armed){ const p=items.get(openId); const i=+de.dataset.delEntry; persist({...p, entries:(p.entries||[]).filter((_,k)=>k!==i), updated:Date.now()}); toast('Compra apagada'); }
