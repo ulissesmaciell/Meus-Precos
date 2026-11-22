@@ -56,7 +56,9 @@ h3{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .near-chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-size:14px;font-weight:600;display:inline-flex;gap:6px;align-items:baseline}
 .near-chip small{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-weight:500}
 .near-chip:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-.top-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.top{flex-direction:column;align-items:stretch}
+.top-btns{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px}
+.top-btns .btn{padding:11px 8px;white-space:nowrap}
 .ean{font-family:var(--f-mono);font-size:12px;color:var(--muted);letter-spacing:.04em}
 .ean-row{display:flex;gap:8px}
 .ean-row .btn{flex-shrink:0;padding:10px 12px}
@@ -169,6 +171,24 @@ input::placeholder{color:var(--muted);opacity:.8}
 .check input{width:22px;height:22px;accent-color:var(--accent);flex-shrink:0;margin:0}
 .check small{font-weight:400;color:var(--muted)}
 .hist .w{display:block;font-family:var(--f-mono);font-size:12px;font-weight:400;color:var(--muted)}
+.scan-wait-box{display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.75);padding:16px 20px;border-radius:14px;font-size:17px;max-width:86%;text-align:left}
+.spinner{width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rc-list{display:flex;flex-direction:column;gap:10px}
+.rc-item{display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+.rc-item.off{opacity:.45}
+.rc-item.warn{border-color:#d29a1e}
+.rc-on input{width:22px;height:22px;accent-color:var(--accent);margin:2px 0 0}
+.rc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.rc-name{font-weight:600}
+.rc-desc{color:var(--muted);font-family:var(--f-mono);font-size:11px;overflow-wrap:anywhere}
+.rc-match,.rc-kg{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;max-width:100%}
+.rc-nums{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rc-nums input{width:84px;padding:8px 10px;font-family:var(--f-mono)}
+.rc-nums .rc-kg{padding:8px 6px}
+.rc-tot{font-weight:700;margin-left:auto}
+.rc-warn{color:#b07a10;font-size:12px}
+#rcSum .ok{color:var(--down)}
 .row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;cursor:pointer;min-width:0}
 .row-edit:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:6px}
 h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
@@ -183,6 +203,8 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 .hist .del{border:0;background:transparent;color:var(--muted);font-size:18px;width:28px;height:28px;border-radius:50%}
 .hist .del:hover{background:var(--up-bg);color:var(--up)}
 .err{color:var(--up);font-size:13px;min-height:1em;margin:0}
+body.in-claude #expBtn,body.in-claude .site-only{display:none}
+body:not(.in-claude) .claude-only{display:none}
 .backup{display:flex;flex-direction:column;gap:10px;padding-top:8px;border-top:1px dashed var(--line)}
 .backup p{margin:0;font-size:13px;color:var(--muted)}
 .backup-btns{display:flex;gap:8px;flex-wrap:wrap}
@@ -199,11 +221,13 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
       <p id="status" class="status wait">Carregando…</p>
     </div>
     <div class="top-btns">
-      <button id="scanBtn" class="btn" type="button" aria-label="Ler código de barras"><svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true"><path d="M1 1v14M4 1v14M6 1v14M9 1v14M12 1v14M13.5 1v14M16 1v14M19 1v14" stroke="currentColor" stroke-width="1.6"/></svg> Ler código</button>
+      <button id="scanBtn" class="btn" type="button" aria-label="Ler código de barras"><svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true"><path d="M1 1v14M4 1v14M6 1v14M9 1v14M12 1v14M13.5 1v14M16 1v14M19 1v14" stroke="currentColor" stroke-width="1.6"/></svg> Código</button>
+      <button id="rcBtn" class="btn" type="button" data-receipt aria-label="Ler nota fiscal por foto">📄 Nota</button>
       <button id="addBtn" class="btn primary" type="button">+ Produto</button>
     </div>
   </header>
   <input id="scanFile" type="file" accept="image/*" capture="environment" hidden>
+  <input id="receiptFile" type="file" accept="image/*" multiple hidden>
   <div class="tools">
     <input id="q" type="search" placeholder="Buscar produto…" aria-label="Buscar produto" autocomplete="off">
     <div class="seg" role="group" aria-label="Ordenar">
@@ -213,7 +237,8 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
   </div>
   <main id="list"></main>
   <footer class="backup">
-    <p>Os dados ficam só neste aparelho. Faça backup de vez em quando.</p>
+    <p class="site-only">Os dados ficam só neste aparelho. Faça backup de vez em quando.</p>
+    <p class="claude-only">Os dados ficam salvos na sua conta Claude. Dá pra trazer um backup do app do celular com <b>Restaurar backup</b>.</p>
     <div class="backup-btns">
       <button id="expBtn" class="btn" type="button">Fazer backup</button>
       <button id="impBtn" class="btn" type="button">Restaurar backup</button>
@@ -227,7 +252,7 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 </div>
 <datalist id="stores"></datalist>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<div id="scanWait" class="scan-wait" hidden>Lendo o código…</div>
+<div id="scanWait" class="scan-wait" hidden><div class="scan-wait-box"><span class="spinner" aria-hidden="true"></span><span id="scanWaitText">Lendo o código…</span></div></div>
 <div id="cam" class="cam" hidden role="dialog" aria-label="Leitor de código de barras">
   <video id="camVideo" playsinline muted autoplay></video>
   <div class="frame"><div class="laser"></div></div>
@@ -274,6 +299,8 @@ function chipFor(d){
 }
 
 /* ---------- Estado e armazenamento ---------- */
+// O mesmo arquivo roda no site (dados no aparelho) e no artefato do Claude (dados na conta Claude)
+const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
 let items = new Map(), mode = 'loading', col = null, loaded = false;
 let sortBy = 'recent', query = '', openId = null, view = null;
 const chains = {};
@@ -307,7 +334,25 @@ function removeProduct(id){
   if(mode==='db') chains[id] = (chains[id]||Promise.resolve()).then(()=>col.doc(id).delete()).catch(dbError);
   else saveLocal();
 }
-function init(){
+async function init(){
+  if(IN_CLAUDE){
+    document.body.classList.add('in-claude');
+    setStatus('Conectando…','wait'); renderAll();
+    let db=null, user=null, uid=null;
+    try{ [db,user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); }catch(e){}
+    if(db && user){ try{ uid = await user.id(); }catch(e){} }
+    if(db && uid){
+      mode='db'; col = db.collection('data/users/'+uid);
+      const t = setTimeout(()=>setStatus('Sem conexão; os dados podem estar desatualizados','warn'), 10000);
+      col.onSnapshot(snap=>{
+        items = new Map(snap.docs.map(d=>[d.id,{...d.data(), id:d.id}]));
+        loaded = true;
+        if(!snap.metadata.fromCache){ clearTimeout(t); setStatus('Salvo na sua conta Claude'); }
+        renderAll();
+      }, err=>{ clearTimeout(t); loaded = true; setStatus('Não consegui carregar seus dados ('+err.code+')','warn'); renderAll(); });
+      return;
+    }
+  }
   mode='local'; loadLocal(); loaded=true;
   try{ localStorage.setItem(LKEY+'.t','1'); localStorage.removeItem(LKEY+'.t'); setStatus('Salvo neste aparelho'); }
   catch(e){ setStatus('Este navegador não está salvando os dados','warn'); }
@@ -340,11 +385,11 @@ function importBackup(file){
         if(cur){
           const seen = new Set(cur.entries.map(e=>e.d+'|'+e.p+'|'+(e.s||'')));
           const add = v.entries.filter(e=>!seen.has(e.d+'|'+e.p+'|'+(e.s||'')));
-          items.set(k,{...cur, entries:[...cur.entries,...add], updated:Date.now()});
-        } else items.set(k,{...v,id:k});
+          if(add.length) persist({...cur, entries:[...cur.entries,...add], updated:Date.now()});
+        } else persist({...v,id:k});
         n++;
       });
-      saveLocal(); renderAll(); toast(n+' produtos restaurados');
+      renderAll(); toast(n+' produtos restaurados');
     }catch(e){ toast('Arquivo de backup inválido'); }
   };
   r.readAsText(file);
@@ -757,6 +802,7 @@ async function decodePhoto(file){
   return r.getText();
 }
 async function handlePhoto(file){
+  $('#scanWaitText').textContent = 'Lendo o código…';
   $('#scanWait').hidden = false;
   let code = null;
   try{ code = String(await decodePhoto(file)).trim(); }catch(e){}
@@ -928,7 +974,7 @@ async function searchByName(q){
     nameCache[q] = out.sort((a,b)=>a.d-b.d).slice(0,6);
   }catch(e){ nameCache[q] = []; }
   delete namePending[q];
-  ['fStore','cmpStore','eeStore'].forEach(id => { const el = document.getElementById(id); if(el && norm(el.value)===q) renderSuggest(id, false); });
+  ['fStore','cmpStore','eeStore','rcStore'].forEach(id => { const el = document.getElementById(id); if(el && norm(el.value)===q) renderSuggest(id, false); });
 }
 let nameT = null;
 function renderSuggest(inputId, loading){
@@ -968,8 +1014,8 @@ function suggestFor(inputId, askLocation){
     if(document.getElementById(inputId)) renderSuggest(inputId, false);
   }, askLocation ? 350 : 0);
 }
-document.addEventListener('focusin', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore' || id==='eeStore') suggestFor(id, false); });
-document.addEventListener('input', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore' || id==='eeStore') suggestFor(id, true); });
+document.addEventListener('focusin', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore' || id==='eeStore' || id==='rcStore') suggestFor(id, false); });
+document.addEventListener('input', ev => { const id = ev.target.id; if(id==='fStore' || id==='cmpStore' || id==='eeStore' || id==='rcStore') suggestFor(id, true); });
 
 
 /* ---------- Editar produto e compras ---------- */
@@ -1155,6 +1201,341 @@ document.addEventListener('change', ev => {
   }
 });
 
+/* ---------- Leitura de cupom fiscal (NFC-e) a partir do texto ---------- */
+const RC_UNITS = 'UN|UND|UNID|KG|KGS|G|GR|L|LT|ML|PC|PCT|CX|FD|DZ|M|BD|SC|FR|TB|VD|LA|PT|BJ|BAN|GL|RL|KT|PR|CJ|SACO|POTE';
+const RC_QTY = new RegExp('(\\d{1,4}(?:[.,]\\d{1,3})?)\\s*(' + RC_UNITS + ')\\b\\.?\\s*(?:[xX×*]\\s*)?(\\d{1,5}[.,]\\d{2,3})\\s+(\\d{1,6}[.,]\\d{2})\\b', 'i');
+const RC_STOP = /(qtd\.?|quantidade)\s*(total\s*)?de\s*itens|valor\s*total|total\s*r\$|^total\b|forma\s*(de\s*)?pagamento|valor\s*a\s*pagar|valor\s*pago|troco|tributos|consulte\s*pela|chave\s*de\s*acesso/i;
+const RC_HEAD = /c[oó]d(igo)?\.?\s+.*descri/i;
+function rcNum(x){
+  x = String(x||'').trim();
+  if(x.includes(',') && x.includes('.')) x = x.replace(/\./g,'');
+  const v = parseFloat(x.replace(',', '.'));
+  return isFinite(v) ? v : null;
+}
+function rcTitle(s){
+  const keepUpper = /^(UHT|PET|LT|ML|KG|G|L|UN|DVD|USB|TV|LED)$/i;
+  return String(s||'').toLowerCase().replace(/\s+/g,' ').trim()
+    .split(' ').map(w => /^\d/.test(w) ? w : (keepUpper.test(w) && w.length<=3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
+    .replace(/\b(\d+)\s?(Kg|KG|G|Ml|ML|L|Lt|LT)\b/g, (m,n,u)=> n + u.toLowerCase());
+}
+function rcSplitDesc(desc){
+  let d = String(desc||'').replace(/\s+/g,' ').trim();
+  d = d.replace(/^\d{1,3}\s+(?=\S)/, m => (/^\d{1,3}\s+\d{4,}/.test(d) ? '' : m)); // nº do item antes do código
+  let code = '';
+  const m = d.match(/^(\d{4,14})\s+(.*)$/);
+  if(m){ code = m[1]; d = m[2]; }
+  d = d.replace(/^\d{1,3}\s+/, '');           // sobra de nº do item
+  d = d.replace(/[|_~]+/g,' ').replace(/\s+/g,' ').trim();
+  return {code, desc: d};
+}
+function parseReceiptText(text){
+  const lines = String(text||'').split(/\r?\n/).map(l => l.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const res = {store:'', date:'', total:null, items:[]};
+  // loja: primeira linha com letras antes do CNPJ
+  const cnpjIdx = lines.findIndex(l => /cnpj/i.test(l));
+  for(const l of lines.slice(0, cnpjIdx > 0 ? cnpjIdx : 3)){
+    if(/[A-Za-zÀ-ú]{3,}/.test(l) && !/danfe|nfc-?e|documento|auxiliar/i.test(l)){
+      res.store = rcTitle(l.replace(/\b(LTDA|EIRELI|ME|EPP|S\/?A|S\.A\.?|COMERCIO|COM\.?)\b\.?/gi,'').replace(/[-–,.]+$/,'')).trim();
+      break;
+    }
+  }
+  // data da emissão
+  const em = text.match(/emiss[aã]o[^\d]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i) || text.match(/(\d{2})\/(\d{2})\/(20\d{2})/);
+  if(em) res.date = `${em[3]}-${em[2]}-${em[1]}`;
+  const tm = text.match(/valor\s*(total|a\s*pagar)[^\d]{0,15}(\d{1,6}[.,]\d{2})/i);
+  if(tm) res.total = rcNum(tm[2]);
+  // região dos itens
+  let start = lines.findIndex(l => RC_HEAD.test(l));
+  start = start >= 0 ? start + 1 : Math.max(0, cnpjIdx + 1);
+  let pending = '';
+  for(let i = start; i < lines.length; i++){
+    const l = lines[i];
+    if(RC_STOP.test(l)) break;
+    const m = RC_QTY.exec(l);
+    if(m){
+      const before = l.slice(0, m.index).trim();
+      const raw = /[A-Za-zÀ-ú]{2,}/.test(before) ? (pending && !/^\d{1,3}\s|^\d{4,}/.test(before) ? pending + ' ' + before : before) : (pending + (before ? ' ' + before : '')).trim();
+      pending = '';
+      const {code, desc} = rcSplitDesc(raw);
+      if(!desc) continue;
+      const qty = rcNum(m[1]), unit = m[2].toUpperCase(), up = rcNum(m[3]), total = rcNum(m[4]);
+      res.items.push(rcItem(desc, code, qty, unit, up, total));
+    } else if(/[A-Za-zÀ-ú]{2,}/.test(l)){
+      const priceEnd = l.match(/^(.*[A-Za-zÀ-ú].*?)\s+(\d{1,6}[.,]\d{2})$/);
+      const next = lines[i+1] || '';
+      if(priceEnd && !RC_QTY.test(next)){
+        const {code, desc} = rcSplitDesc((pending ? pending + ' ' : '') + priceEnd[1]);
+        pending = '';
+        const t = rcNum(priceEnd[2]);
+        if(desc && t) res.items.push({...rcItem(desc, code, 1, 'UN', t, t), check:true});
+      } else {
+        pending = (/^\d{1,3}\s+\d{4,}|^\d{4,14}\s/.test(l) || !pending) ? l : pending + ' ' + l;
+      }
+    }
+  }
+  return res;
+}
+function rcItem(desc, code, qty, unit, up, total){
+  const kg = /^(KG|KGS)$/.test(unit), g = /^(G|GR)$/.test(unit);
+  const it = {desc, name: rcTitle(desc), ean: (code && validGTIN(code)) ? code : '', kg: kg || g, qty: qty || 1, unit, p: up, t: total, check:false};
+  if(g){ it.qty = (qty||0)/1000; it.p = it.qty ? Math.round(total/it.qty*100)/100 : up; }
+  if(it.kg) it.name = it.name.replace(/\s*\b(kg|kgs)\b\.?/gi,'').trim();
+  if(it.qty && it.p && it.t && Math.abs(it.qty*it.p - it.t) > 0.02 + it.t*0.002){
+    // um dos números veio errado: se total e quantidade batem com outro preço, corrige; senão marca pra conferir
+    it.check = true;
+  }
+  return it;
+}
+
+/* ---------- Foto da nota fiscal: leitura e revisão ---------- */
+let rcData = null, rcAppend = false, rcBusy = false;
+function rcProgress(text){ const w = $('#scanWait'); w.hidden = !text; if(text) $('#scanWaitText').textContent = text; }
+
+// No site: leitura de texto (OCR) grátis, no próprio aparelho
+let tessP = null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(!tessP) tessP = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = () => window.Tesseract ? res(window.Tesseract) : rej(new Error('load'));
+    s.onerror = () => { tessP = null; rej(new Error('load')); };
+    document.head.appendChild(s);
+  });
+  return tessP;
+}
+function rcPrepImage(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(2, 1700 / img.naturalWidth, 4200 / img.naturalHeight);
+      const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+      const ctx = c.getContext('2d', {willReadFrequently:true}); ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      // tons de cinza + contraste (papel térmico costuma vir apagado)
+      const d = ctx.getImageData(0, 0, c.width, c.height), px = d.data, hist = new Uint32Array(256);
+      for(let i = 0; i < px.length; i += 4){ const g = (px[i]*299 + px[i+1]*587 + px[i+2]*114) / 1000 | 0; px[i] = g; hist[g]++; }
+      const n = px.length/4; let lo = 0, hi = 255, acc = 0;
+      for(let v = 0; v < 256; v++){ acc += hist[v]; if(acc > n*0.02){ lo = v; break; } }
+      acc = 0; for(let v = 255; v >= 0; v--){ acc += hist[v]; if(acc > n*0.02){ hi = v; break; } }
+      const span = Math.max(1, hi - lo);
+      for(let i = 0; i < px.length; i += 4){ const g = Math.max(0, Math.min(255, (px[i] - lo) * 255 / span)); px[i] = px[i+1] = px[i+2] = g; }
+      ctx.putImageData(d, 0, 0); res(c);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
+    img.src = url;
+  });
+}
+async function rcReadWithOCR(files){
+  rcProgress('Preparando o leitor… (na 1ª vez baixa uns arquivos)');
+  const T = await loadTesseract();
+  let stage = 'Baixando o leitor…';
+  const worker = await T.createWorker('por', 1, {logger: m => {
+    if(m.status === 'recognizing text') rcProgress(`${stage} ${Math.round((m.progress||0)*100)}%`);
+    else if(/load|download/i.test(m.status||'')) rcProgress('Baixando o leitor (só na 1ª vez)… ' + Math.round((m.progress||0)*100) + '%');
+  }});
+  try{
+    await worker.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'});
+    const out = {store:'', date:'', total:null, items:[], text:''};
+    for(let i = 0; i < files.length; i++){
+      stage = files.length > 1 ? `Lendo a nota (foto ${i+1} de ${files.length})…` : 'Lendo a nota…';
+      rcProgress(stage);
+      const c = await rcPrepImage(files[i]);
+      const {data} = await worker.recognize(c);
+      const r = parseReceiptText(data.text || '');
+      out.text += (data.text || '') + '\n';
+      out.store = out.store || r.store; out.date = out.date || r.date; out.total = out.total ?? r.total;
+      out.items.push(...r.items);
+    }
+    return out;
+  } finally { try{ await worker.terminate(); }catch(e){} }
+}
+
+// No Claude: a IA do Claude lê a foto, usando o plano de quem está usando
+const RC_PROMPT = `As imagens são fotos de um cupom fiscal brasileiro (NFC-e), possivelmente em partes. Transcreva TODOS os itens comprados.
+Responda só com JSON neste formato:
+{"loja":"nome fantasia ou razão social, sem LTDA/ME","data":"AAAA-MM-DD da emissão ou vazio","total":número ou null,
+ "itens":[{"descricao":"texto do cupom","nome":"nome legível do produto, sem abreviações, com tamanho se houver (ex.: Leite Condensado Moça 395g)","codigo":"código de barras/EAN do item ou vazio","quantidade":número,"unidade":"UN ou KG etc.","preco_unitario":número,"total":número}]}
+Regras: números com ponto decimal; item vendido por peso tem unidade KG, quantidade = quilos e preco_unitario = preço do kg; ignore descontos, sacolas só se não tiver preço, linhas de pagamento e tributos; se um item aparecer repetido em linhas diferentes, mantenha cada linha.`;
+async function rcReadWithClaude(files){
+  const sample = await window.claude.use('sample');
+  if(!sample) throw {code:'not_granted'};
+  const lim = await sample.limits().catch(() => null);
+  if(!lim || !lim.images) throw {code:'images_unavailable'};
+  const imgs = Array.from(files).slice(0, lim.images.maxCount || 4);
+  rcProgress('O Claude está lendo a nota… (pode levar até 1 minuto)');
+  const j = await sample.json(RC_PROMPT, {images: imgs, modelTier: 'default'});
+  const n = v => { const x = typeof v === 'number' ? v : rcNum(v); return isFinite(x) && x > 0 ? x : null; };
+  const out = {store: String(j && j.loja || '').trim(), date: /^\d{4}-\d{2}-\d{2}$/.test(j && j.data || '') ? j.data : '', total: n(j && j.total), items: []};
+  (Array.isArray(j && j.itens) ? j.itens : []).forEach(x => {
+    const unit = String(x.unidade || 'UN').toUpperCase();
+    const it = rcItem(String(x.descricao || x.nome || ''), String(x.codigo || '').replace(/\D/g,''), n(x.quantidade) || 1, unit, n(x.preco_unitario), n(x.total));
+    if(x.nome) it.name = String(x.nome).trim();
+    if(!it.p && it.t && it.qty) it.p = Math.round(it.t / it.qty * 100) / 100;
+    if(!it.t && it.p) it.t = Math.round(it.p * it.qty * 100) / 100;
+    if(it.p) out.items.push(it);
+  });
+  return out;
+}
+
+async function handleReceiptFiles(files){
+  if(!files || !files.length || rcBusy) return;
+  rcBusy = true;
+  let r = null, err = null;
+  try{ r = IN_CLAUDE ? await rcReadWithClaude(files) : await rcReadWithOCR(files); }
+  catch(e){ err = e; }
+  rcBusy = false; rcProgress('');
+  if(err){
+    const c = err && err.code;
+    toast(c==='not_granted' ? 'Permita o uso do Claude para ler a nota.'
+      : c==='images_unavailable' ? 'Este app não consegue enviar imagens ao Claude aqui.'
+      : c==='rate_limited' ? 'Limite de uso do Claude atingido. Tente mais tarde.'
+      : c==='invalid_json' ? 'Não consegui entender a nota. Tente outra foto.'
+      : (err && err.message==='load') ? 'Sem internet para baixar o leitor de notas.'
+      : 'Não consegui ler a nota. Tente uma foto mais nítida.');
+    if(!rcAppend) return;
+  }
+  if(r){
+    if(rcAppend && rcData){
+      rcSyncFromForm();
+      rcData.items.push(...r.items.map(rcPrepItem));
+      rcData.store = rcData.store || r.store; rcData.date = rcData.date || r.date; rcData.total = rcData.total ?? r.total;
+    } else rcData = {store: r.store, date: r.date || today(), total: r.total, items: r.items.map(rcPrepItem)};
+  }
+  rcAppend = false;
+  if(!rcData) return;
+  if(!rcData.items.length){ toast('Não encontrei itens nessa foto. Tente mais de perto, com a nota reta e bem iluminada.'); }
+  openReceiptReview();
+}
+
+// Liga cada item a um produto já cadastrado (pelo código ou pelo nome)
+function rcTokens(s){ return normP(s).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w => w.length >= 3 && !/^\d+$/.test(w)); }
+function rcScore(itemName, prodName){
+  const a = rcTokens(itemName), b = rcTokens(prodName); if(!a.length || !b.length) return 0;
+  let hit = 0; a.forEach(w => { if(b.some(x => x === w || x.startsWith(w) || w.startsWith(x))) hit++; });
+  return hit / Math.max(a.length, Math.min(b.length, a.length + 1));
+}
+function rcCandidates(it){
+  return [...items.values()].map(p => ({p, s: (it.ean && p.ean && sameCode(p.ean, it.ean)) ? 2 : rcScore(it.name + ' ' + it.desc, p.name + ' ' + (p.unit||''))}))
+    .filter(x => x.s > 0.2).sort((a,b) => b.s - a.s).slice(0, 6);
+}
+function rcPrepItem(it){
+  const c = rcCandidates(it);
+  return {...it, on: true, match: c.length && c[0].s >= 0.6 ? c[0].p.id : ''};
+}
+const rcMoney = v => v == null ? '' : money2(v);
+function rcRowHTML(it, i){
+  const cands = rcCandidates(it), opts = new Set();
+  let o = `<option value="">➕ Novo produto</option>`;
+  cands.forEach(({p}) => { opts.add(p.id); o += `<option value="${esc(p.id)}"${it.match===p.id?' selected':''}>↪ ${esc(p.name)}${p.unit?' · '+esc(p.unit):''}</option>`; });
+  const rest = [...items.values()].filter(p => !opts.has(p.id)).sort((a,b) => (a.name||'').localeCompare(b.name||'','pt-BR'));
+  if(rest.length) o += `<optgroup label="Outros produtos">` + rest.map(p => `<option value="${esc(p.id)}"${it.match===p.id?' selected':''}>${esc(p.name)}</option>`).join('') + `</optgroup>`;
+  const tot = it.kg ? (it.qty && it.p ? it.qty*it.p : it.t) : (it.qty||1)*(it.p||0);
+  return `<div class="rc-item${it.on?'':' off'}${it.check?' warn':''}" data-rc="${i}">
+    <label class="rc-on"><input type="checkbox" data-rc-on="${i}"${it.on?' checked':''} aria-label="Incluir item"></label>
+    <div class="rc-body">
+      <input class="rc-name" id="rcName${i}" value="${esc(it.name)}" aria-label="Nome do produto" autocomplete="off">
+      ${it.desc && normP(it.desc)!==normP(it.name) ? `<small class="rc-desc">na nota: ${esc(it.desc)}</small>` : ''}
+      <select class="rc-match" id="rcMatch${i}" aria-label="Produto">${o}</select>
+      <div class="rc-nums">
+        <select id="rcKg${i}" class="rc-kg" aria-label="Tipo"><option value="un"${it.kg?'':' selected'}>un</option><option value="kg"${it.kg?' selected':''}>kg</option></select>
+        <input id="rcQ${i}" inputmode="decimal" value="${esc(it.kg ? String(it.qty).replace('.',',') : String(it.qty||1).replace('.',','))}" aria-label="Quantidade ou peso">
+        <span>×</span>
+        <input id="rcP${i}" inputmode="decimal" value="${esc(rcMoney(it.p))}" aria-label="Preço unitário ou do kg">
+        <span class="rc-tot mono" id="rcT${i}">= ${tot ? fmt(Math.round(tot*100)/100) : '—'}</span>
+      </div>
+      ${it.check ? '<small class="rc-warn">⚠ Os números desta linha não batem. Confira com a nota.</small>' : ''}
+    </div>
+  </div>`;
+}
+function rcSyncFromForm(){
+  if(!rcData) return;
+  const st = $('#rcStore'), dt = $('#rcDate');
+  if(st) rcData.store = st.value.trim(); if(dt) rcData.date = dt.value || today();
+  rcData.items.forEach((it, i) => {
+    const el = $('#rcName'+i); if(!el) return;
+    it.name = el.value.trim(); it.match = $('#rcMatch'+i).value; it.kg = $('#rcKg'+i).value === 'kg';
+    it.qty = parseNum($('#rcQ'+i).value) || (it.kg ? null : 1); it.p = parseNum($('#rcP'+i).value);
+    it.on = $(`[data-rc-on="${i}"]`).checked;
+  });
+}
+function rcSummary(){
+  const on = rcData.items.filter(x => x.on);
+  const sum = rcData.items.reduce((s, x, i) => { if(!x.on) return s; const t = x.kg ? (x.qty && x.p ? x.qty*x.p : x.t||0) : (x.qty||1)*(x.p||0); return s + (t||0); }, 0);
+  let cmp = '';
+  if(rcData.total){ const diff = Math.round((sum - rcData.total)*100)/100; cmp = Math.abs(diff) < 0.05 ? ' · <b class="ok">bate com o total da nota ✓</b>' : ` · total da nota ${fmt(rcData.total)} (diferença ${fmt(Math.abs(diff))}, confira)`; }
+  const el = $('#rcSum'); if(el) el.innerHTML = `${on.length} de ${rcData.items.length} itens · soma ${fmt(Math.round(sum*100)/100)}${cmp}`;
+  const b = $('#rcSave'); if(b) b.textContent = on.length ? `Salvar ${on.length} ${on.length===1?'compra':'compras'}` : 'Nada marcado';
+}
+function openReceiptReview(){
+  view = 'receipt'; openId = null;
+  const engine = IN_CLAUDE ? 'Lido pelo Claude' : 'Lido no aparelho (pode errar: confira os números)';
+  $('#sheet').innerHTML = `
+    <div class="sheet-head"><div><h2 id="sheetTitle">Itens da nota</h2><p>${engine}</p></div><button class="x" type="button" data-close aria-label="Fechar">×</button></div>
+    <div class="slip">
+      <div class="field"><label for="rcStore">Onde</label>
+        <div class="ean-row"><input id="rcStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(rcData.store||'')}"><button class="btn" type="button" data-near="rcStore">📍 Perto</button></div>
+        <div class="near" data-near-out="rcStore" aria-live="polite"></div></div>
+      <div class="field"><label for="rcDate">Data</label><input id="rcDate" type="date" value="${esc(rcData.date||today())}"></div>
+    </div>
+    <p id="rcSum" class="count" style="margin:0"></p>
+    <div class="rc-list">${rcData.items.map(rcRowHTML).join('') || '<p class="count">Nenhum item encontrado.</p>'}</div>
+    <div class="btn-col">
+      <button id="rcSave" class="btn primary wide" type="button">Salvar</button>
+      <button class="btn wide" type="button" data-rc-more>📷 Adicionar outra foto da nota</button>
+      <button class="btn wide" type="button" data-close>Cancelar</button>
+    </div>`;
+  showSheet();
+  rcSummary();
+}
+function rcUpdateRow(i){
+  rcSyncFromForm();
+  const it = rcData.items[i], row = document.querySelector(`[data-rc="${i}"]`);
+  if(row) row.classList.toggle('off', !it.on);
+  const tot = it.kg ? (it.qty && it.p ? it.qty*it.p : null) : (it.qty||1)*(it.p||0);
+  const t = $('#rcT'+i); if(t) t.textContent = '= ' + (tot ? fmt(Math.round(tot*100)/100) : '—');
+  rcSummary();
+}
+function saveReceipt(){
+  rcSyncFromForm();
+  const on = rcData.items.filter(x => x.on);
+  const bad = on.findIndex(x => !x.name || !x.p || (x.kg && !x.qty));
+  if(bad >= 0){ toast('Confira o item ' + (rcData.items.indexOf(on[bad]) + 1) + ': falta nome, preço ou peso.'); const el = $('#rcName' + rcData.items.indexOf(on[bad])); if(el) el.focus(); return; }
+  const d = rcData.date || today(), s = rcData.store || '';
+  const touched = new Map();
+  on.forEach(it => {
+    const e = {p: Math.round(it.p*100)/100, d, s};
+    if(it.kg){ e.w = Math.round(it.qty*1000)/1000; e.t = Math.round(it.qty*it.p*100)/100; }
+    else if(it.qty && it.qty !== 1){ e.q = it.qty; e.t = Math.round(it.qty*it.p*100)/100; }
+    let prod = it.match ? (touched.get(it.match) || items.get(it.match)) : null;
+    if(!prod && !it.match){
+      const key = 'new:' + normP(it.name);
+      prod = touched.get(key);
+      if(!prod){ prod = {id: newId(), name: it.name, unit: '', entries: [], updated: Date.now()}; if(it.ean) prod.ean = it.ean; if(it.kg) prod.byWeight = true; touched.set(key, prod); }
+      prod.entries = [...prod.entries, e];
+      return;
+    }
+    if(!prod) return;
+    const np = {...prod, entries: [...(prod.entries||[]), e], updated: Date.now()};
+    if(!np.ean && it.ean && ![...items.values()].some(x => x.id !== np.id && x.ean && sameCode(x.ean, it.ean))) np.ean = it.ean;
+    if(it.kg && !np.byWeight && !(prod.entries||[]).length) np.byWeight = true;
+    touched.set(np.id, np);
+  });
+  touched.forEach(p => persist(p));
+  if(s && d === today()){ setTrip(s); learnPlace(s); }
+  toast(`${on.length} ${on.length===1?'compra salva':'compras salvas'}`);
+  rcData = null; closeSheet();
+}
+document.addEventListener('change', ev => {
+  const t = ev.target;
+  if(t.id === 'receiptFile' && t.files && t.files.length){ const f = Array.from(t.files); t.value = ''; handleReceiptFiles(f); return; }
+  const on = t.dataset && t.dataset.rcOn; if(on != null){ rcUpdateRow(+on); return; }
+  const m = t.id && t.id.match(/^rc(Kg|Match)(\d+)$/); if(m) rcUpdateRow(+m[2]);
+});
+document.addEventListener('input', ev => {
+  const m = ev.target.id && ev.target.id.match(/^rc(Q|P|Name)(\d+)$/); if(m) rcUpdateRow(+m[2]);
+});
+
 /* ---------- Folha: abrir/fechar ---------- */
 let lastFocus = null;
 function showSheet(){ lastFocus = document.activeElement; $('#overlay').hidden = false; document.body.style.overflow='hidden'; }
@@ -1172,6 +1553,9 @@ document.addEventListener('click', ev=>{
   const s = t.closest('[data-sort]');
   if(s){ sortBy = s.dataset.sort; document.querySelectorAll('[data-sort]').forEach(b=>b.setAttribute('aria-pressed', b===s?'true':'false')); renderList(); return; }
   const pp = t.closest('[data-pick-prod]'); if(pp){ pickExisting(pp.dataset.pickProd); return; }
+  if(t.closest('[data-receipt]')){ rcAppend = false; $('#receiptFile').click(); return; }
+  if(t.closest('[data-rc-more]')){ rcSyncFromForm(); rcAppend = true; $('#receiptFile').click(); return; }
+  if(t.closest('#rcSave')){ saveReceipt(); return; }
   if(t.closest('[data-edit-prod]')){ openEditProduct(); return; }
   const ee = t.closest('[data-edit-entry]'); if(ee){ openEditEntry(+ee.dataset.editEntry); return; }
   if(t.closest('[data-back]')){ openDetail(openId); return; }
@@ -1223,7 +1607,7 @@ document.addEventListener('keydown', ev=>{
 });
 
 init();
-if('serviceWorker' in navigator && location.protocol==='https:'){
+if(!IN_CLAUDE && 'serviceWorker' in navigator && location.protocol==='https:'){
   window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 })();
