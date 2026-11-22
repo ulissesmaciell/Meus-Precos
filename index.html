@@ -1201,6 +1201,115 @@ document.addEventListener('change', ev => {
   }
 });
 
+
+/* ---------- Deixa a leitura gratuita mais "inteligente" ---------- */
+// Abreviações comuns em cupom fiscal → palavra completa (com acento)
+const RC_ABBR = {
+  qjo:'queijo', qj:'queijo', quo:'queijo', qio:'queijo', gjo:'queijo', oueijo:'queijo', muss:'mussarela', mus:'mussarela', mussar:'mussarela', fat:'fatiado', fatiad:'fatiado', ralad:'ralado', prato:'prato',
+  pres:'presunto', presun:'presunto', mort:'mortadela', mortad:'mortadela', requeij:'requeijão', req:'requeijão', iog:'iogurte', iogur:'iogurte',
+  mant:'manteiga', mantei:'manteiga', marg:'margarina', margar:'margarina', leit:'leite', lte:'leite', cond:'condensado', integ:'integral', int:'integral',
+  desn:'desnatado', semid:'semidesnatado', achoc:'achocolatado', choc:'chocolate', bisc:'biscoito', bis:'biscoito', rech:'recheado', biscoit:'biscoito',
+  refri:'refrigerante', refrig:'refrigerante', refr:'refrigerante', cerv:'cerveja', agua:'água', ag:'água', min:'mineral', mineral:'mineral', suc:'suco', nect:'néctar',
+  cafe:'café', caf:'café', acuc:'açúcar', acucar:'açúcar', refin:'refinado', crist:'cristal', feij:'feijão', feijao:'feijão', carioc:'carioca', mac:'macarrão',
+  macarrao:'macarrão', esp:'especial', espag:'espaguete', parafus:'parafuso', farin:'farinha', far:'farinha', trig:'trigo', mand:'mandioca', fub:'fubá', fuba:'fubá',
+  flocao:'flocão', cusc:'cuscuz', tap:'tapioca', azeit:'azeite', oleo:'óleo', ol:'óleo', vinag:'vinagre', mol:'molho', tom:'tomate', tomat:'tomate', extr:'extrato',
+  maion:'maionese', most:'mostarda', temp:'tempero', sal:'sal', sard:'sardinha', atum:'atum', milh:'milho', ervil:'ervilha',
+  fgo:'frango', frg:'frango', fran:'frango', peit:'peito', cox:'coxa', sobrecox:'sobrecoxa', asa:'asa', file:'filé', bov:'bovino', bovin:'bovino', suin:'suíno', suino:'suíno',
+  carn:'carne', moid:'moída', ling:'linguiça', linguica:'linguiça', calab:'calabresa', tosc:'toscana', acem:'acém', musc:'músculo', musculo:'músculo', cost:'costela',
+  pic:'picanha', alcat:'alcatra', cox_mole:'coxão mole', ovo:'ovos', ovos:'ovos', bco:'branco', verm:'vermelho', vde:'verde', amar:'amarelo',
+  ban:'banana', bana:'banana', lar:'laranja', laranj:'laranja', lim:'limão', limao:'limão', mamao:'mamão', maca:'maçã', melanc:'melancia', melao:'melão', abac:'abacaxi',
+  bat:'batata', ceb:'cebola', ceno:'cenoura', cenour:'cenoura', alf:'alface', pim:'pimentão', pimentao:'pimentão', abob:'abóbora', abobora:'abóbora', cheiro:'cheiro',
+  pao:'pão', franc:'francês', frances:'francês', form:'forma', torr:'torrada', bolo:'bolo',
+  pap:'papel', hig:'higiênico', higien:'higiênico', toalh:'toalha', guard:'guardanapo', deterg:'detergente', det:'detergente', amac:'amaciante', sab:'sabão',
+  sabao:'sabão', sabon:'sabonete', desinf:'desinfetante', limp:'limpador', sanit:'sanitária', alc:'álcool', alcool:'álcool', esponj:'esponja', lav:'lava',
+  shamp:'shampoo', sh:'shampoo', condic:'condicionador', cr:'creme', dent:'dental', esc:'escova', desod:'desodorante', abs:'absorvente', frald:'fralda',
+  rac:'ração', racao:'ração', gat:'gato', caes:'cães', cao:'cão', aliment:'alimento', liq:'líquido', po:'pó', tradic:'tradicional', trad:'tradicional',
+  zero:'zero', lght:'light', diet:'diet', sach:'sachê', sache:'sachê', pct:'pacote', emb:'embalagem', unid:'unidade', und:'unidade',
+  guarana:'guaraná', uniao:'união', moca:'moça', sao:'são', acai:'açaí', cha:'chá', file_:'filé', pessego:'pêssego', camarao:'camarão', fecula:'fécula',
+  higienico:'higiênico', sanitaria:'sanitária', liquido:'líquido', racao_:'ração', limao_:'limão', feijoada:'feijoada', pure:'purê', pudim:'pudim', mamao_:'mamão',
+  cafe_:'café', acucar_:'açúcar', agua_:'água', atacadao:'atacadão', mercadao:'mercadão', joao:'joão', acougue:'açougue', farmacia:'farmácia',
+  conveniencia:'conveniência', panificacao:'panificação', distribuicao:'distribuição', economico:'econômico', pao_:'pão', lacteos:'lácteos', antarct:'antarctica'
+};
+const RC_SMALL = new Set(['de','da','do','das','dos','e','com','sem','para','p/','c/','s/','em']);
+function rcPretty(desc){
+  let s = String(desc||'').replace(/[|_~"`´^]+/g,' ').replace(/\s+/g,' ').trim();
+  s = s.replace(/\bC\/\s*/gi,'com ').replace(/\bS\/\s*/gi,'sem ').replace(/\bP\/\s*/gi,'para ');
+  s = s.replace(/\b(\d+(?:[.,]\d+)?)\s*(KG|G|GR|ML|L|LT|LTS|M|UN|UND|CM|MM)\b/gi, (m,n,u) => n + ({GR:'g',LT:'L',LTS:'L',UND:'un',UN:'un',L:'L'}[u.toUpperCase()] || u.toLowerCase()));
+  const words = s.split(' ');
+  const out = words.map((w, i) => {
+    if(/^\d/.test(w)) return w;                       // números e tamanhos ficam como estão
+    const k = normP(w).replace(/[^a-z]/g,'');
+    let full = RC_ABBR[k] || RC_ABBR[k + '_'];
+    if(k === 'cond') full = /^(leite|leit|lte|lt|cr|creme|doce)$/.test(normP(words[i-1]||'')) ? 'condensado' : 'condicionador';
+    const base = full || w.toLowerCase();
+    if(i > 0 && RC_SMALL.has(base)) return base;
+    if(/^(uht|pet|tv|usb|led)$/i.test(base)) return base.toUpperCase();
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  });
+  return out.join(' ').replace(/\s+/g,' ').trim();
+}
+// Nome da loja: tira CNPJ, IE e números; ignora endereço
+function rcCleanStore(l){
+  return String(l||'')
+    .replace(/\d{2}\.?\d{3}\.?\d{3}\s*\/?\s*\d{4}\s*-?\s*\d{2}/g,' ')
+    .replace(/\b(CNPJ|C\.N\.P\.J\.?|IE|I\.E\.?|INSC(R|RICAO|\.)?\s*(EST(ADUAL)?)?|CPF|IM|NIRE)\b\.?\s*:?/gi,' ')
+    .replace(/[\d:;#*=]+/g,' ')
+    .replace(/\b(LTDA|EIRELI|ME|EPP|S\/?A|S\.A\.?|SA|CIA|COMERCIO|COM\.?|IND(USTRIA)?|DE ALIMENTOS|ALIMENTOS|VAREJISTA|ATACADISTA|DISTRIBUIDORA)\b\.?/gi,' ')
+    .replace(/[-–,./]+\s*$/,'').replace(/^\s*[-–,./]+/,'').replace(/\s+/g,' ').trim();
+}
+const RC_ADDR = /\b(av|av\.|avenida|rua|r\.|rod|rodovia|br-?\d|ce-?\d|cep|bairro|fone|tel|telefone|loja\s*\d|centro|km\s*\d|n[ºo°]\s*\d|s\/n)\b/i;
+function rcPickStore(lines){
+  const stop = lines.findIndex(l => /danfe|documento auxiliar|nfc-?e|c[oó]digo\s+descri/i.test(l));
+  const zone = lines.slice(0, stop > 0 ? Math.min(stop, 8) : 6);
+  for(const l of zone){
+    if(RC_ADDR.test(l)) continue;
+    const c = rcCleanStore(l);
+    if((c.match(/[A-Za-zÀ-ú]{2,}/g)||[]).length >= 1 && c.replace(/[^A-Za-zÀ-ú]/g,'').length >= 4) return rcPretty(c);
+  }
+  return '';
+}
+// CNPJ válido (com dígitos verificadores)
+function rcValidCNPJ(c){
+  if(!/^\d{14}$/.test(c) || /^(\d)\1+$/.test(c)) return false;
+  const calc = n => { const w = n === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]; const s = w.reduce((a, x, i) => a + x * +c[i], 0); const r = s % 11; return r < 2 ? 0 : 11 - r; };
+  return calc(12) === +c[12] && calc(13) === +c[13];
+}
+function rcFindCNPJ(text){
+  const t = String(text||'').replace(/[Oo](?=[\d.\/-]*\d)/g,'0');
+  const re = /(\d{2})\s*\.?\s*(\d{3})\s*\.?\s*(\d{3})\s*\/?\s*(\d{4})\s*-?\s*(\d{2})/g; let m;
+  while((m = re.exec(t))){ const c = m.slice(1).join(''); if(rcValidCNPJ(c)) return c; }
+  return '';
+}
+// Consulta o cadastro público da Receita (BrasilAPI); guarda no aparelho pra não consultar de novo
+const CNPJ_KEY = 'meusprecos.cnpj';
+async function rcStoreFromCNPJ(cnpj){
+  if(!cnpj || IN_CLAUDE) return '';
+  let cache = {}; try{ cache = JSON.parse(localStorage.getItem(CNPJ_KEY)||'{}'); }catch(e){}
+  if(cache[cnpj]) return cache[cnpj];
+  const generic = /^(matriz|filial|loja\s*\d*|dire[cç][aã]o geral|sede|unidade\s*\d*|-|\*+)$/i;
+  for(const url of [`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, `https://publica.cnpj.ws/cnpj/${cnpj}`]){
+    try{
+      const j = await timedFetch(url, 7000);
+      const fant = String(j.nome_fantasia || (j.estabelecimento && j.estabelecimento.nome_fantasia) || '').trim();
+      const razao = String(j.razao_social || '').trim();
+      let name = fant && !generic.test(fant) ? fant : rcCleanStore(razao);
+      name = name.replace(/\s*[-–]\s*(loja|filial|unid(ade)?)\s*\d+.*$/i,'').trim();
+      if(name){ name = rcPretty(name); cache[cnpj] = name; try{ localStorage.setItem(CNPJ_KEY, JSON.stringify(cache)); }catch(e){} return name; }
+    }catch(e){}
+  }
+  return '';
+}
+// Aprende com as suas correções: descrição da nota → nome/produto que você escolheu
+const RCMAP_KEY = 'meusprecos.rcmap';
+function rcMapGet(){ try{ return JSON.parse(localStorage.getItem(RCMAP_KEY)||'{}'); }catch(e){ return {}; } }
+function rcMapKey(desc){ return normP(desc).replace(/[^a-z0-9]+/g,' ').trim(); }
+function rcLearn(pairs){
+  const m = rcMapGet();
+  pairs.forEach(([desc, name, id]) => { const k = rcMapKey(desc); if(k) m[k] = {name, id}; });
+  const keys = Object.keys(m); if(keys.length > 1500) keys.slice(0, keys.length - 1500).forEach(k => delete m[k]);
+  try{ localStorage.setItem(RCMAP_KEY, JSON.stringify(m)); }catch(e){}
+}
+
 /* ---------- Leitura de cupom fiscal (NFC-e) a partir do texto ---------- */
 const RC_UNITS = 'UN|UND|UNID|KG|KGS|G|GR|L|LT|ML|PC|PCT|CX|FD|DZ|M|BD|SC|FR|TB|VD|LA|PT|BJ|BAN|GL|RL|KT|PR|CJ|SACO|POTE';
 const RC_QTY = new RegExp('(\\d{1,4}(?:[.,]\\d{1,3})?)\\s*(' + RC_UNITS + ')\\b\\.?\\s*(?:[xX×*]\\s*)?(\\d{1,5}[.,]\\d{2,3})\\s+(\\d{1,6}[.,]\\d{2})\\b', 'i');
@@ -1230,15 +1339,11 @@ function rcSplitDesc(desc){
 }
 function parseReceiptText(text){
   const lines = String(text||'').split(/\r?\n/).map(l => l.replace(/\s+/g,' ').trim()).filter(Boolean);
-  const res = {store:'', date:'', total:null, items:[]};
-  // loja: primeira linha com letras antes do CNPJ
+  const res = {store:'', date:'', total:null, items:[], cnpj:''};
+  // loja: primeira linha com nome (sem CNPJ, IE ou endereço); o CNPJ vai ser consultado depois
   const cnpjIdx = lines.findIndex(l => /cnpj/i.test(l));
-  for(const l of lines.slice(0, cnpjIdx > 0 ? cnpjIdx : 3)){
-    if(/[A-Za-zÀ-ú]{3,}/.test(l) && !/danfe|nfc-?e|documento|auxiliar/i.test(l)){
-      res.store = rcTitle(l.replace(/\b(LTDA|EIRELI|ME|EPP|S\/?A|S\.A\.?|COMERCIO|COM\.?)\b\.?/gi,'').replace(/[-–,.]+$/,'')).trim();
-      break;
-    }
-  }
+  res.store = rcPickStore(lines);
+  res.cnpj = rcFindCNPJ(text);
   // data da emissão
   const em = text.match(/emiss[aã]o[^\d]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i) || text.match(/(\d{2})\/(\d{2})\/(20\d{2})/);
   if(em) res.date = `${em[3]}-${em[2]}-${em[1]}`;
@@ -1277,7 +1382,7 @@ function parseReceiptText(text){
 }
 function rcItem(desc, code, qty, unit, up, total){
   const kg = /^(KG|KGS)$/.test(unit), g = /^(G|GR)$/.test(unit);
-  const it = {desc, name: rcTitle(desc), ean: (code && validGTIN(code)) ? code : '', kg: kg || g, qty: qty || 1, unit, p: up, t: total, check:false};
+  const it = {desc, name: rcPretty(desc), ean: (code && validGTIN(code)) ? code : '', kg: kg || g, qty: qty || 1, unit, p: up, t: total, check:false};
   if(g){ it.qty = (qty||0)/1000; it.p = it.qty ? Math.round(total/it.qty*100)/100 : up; }
   if(it.kg) it.name = it.name.replace(/\s*\b(kg|kgs)\b\.?/gi,'').trim();
   if(it.qty && it.p && it.t && Math.abs(it.qty*it.p - it.t) > 0.02 + it.t*0.002){
@@ -1344,9 +1449,10 @@ async function rcReadWithOCR(files){
       const {data} = await worker.recognize(c);
       const r = parseReceiptText(data.text || '');
       out.text += (data.text || '') + '\n';
-      out.store = out.store || r.store; out.date = out.date || r.date; out.total = out.total ?? r.total;
+      out.store = out.store || r.store; out.date = out.date || r.date; out.total = out.total ?? r.total; out.cnpj = out.cnpj || r.cnpj;
       out.items.push(...r.items);
     }
+    if(out.cnpj){ rcProgress('Buscando o nome da loja pelo CNPJ…'); const n = await rcStoreFromCNPJ(out.cnpj); if(n) out.store = n; }
     return out;
   } finally { try{ await worker.terminate(); }catch(e){} }
 }
@@ -1420,29 +1526,39 @@ function rcCandidates(it){
     .filter(x => x.s > 0.2).sort((a,b) => b.s - a.s).slice(0, 6);
 }
 function rcPrepItem(it){
+  const learned = rcMapGet()[rcMapKey(it.desc)];
+  if(learned){
+    if(learned.id && items.has(learned.id)) return {...it, name: items.get(learned.id).name, on: true, match: learned.id, learned: true};
+    if(learned.name) it = {...it, name: learned.name, learned: true};
+  }
   const c = rcCandidates(it);
   return {...it, on: true, match: c.length && c[0].s >= 0.6 ? c[0].p.id : ''};
 }
 const rcMoney = v => v == null ? '' : money2(v);
+function rcLineTotal(x){
+  const calc = x.kg ? (x.qty && x.p ? x.qty*x.p : null) : (x.qty||1)*(x.p||0);
+  if(x.t && calc != null && Math.abs(calc - x.t) < 0.03) return x.t;
+  return calc != null ? Math.round(calc*100)/100 : (x.t || null);
+}
 function rcRowHTML(it, i){
   const cands = rcCandidates(it), opts = new Set();
   let o = `<option value="">➕ Novo produto</option>`;
   cands.forEach(({p}) => { opts.add(p.id); o += `<option value="${esc(p.id)}"${it.match===p.id?' selected':''}>↪ ${esc(p.name)}${p.unit?' · '+esc(p.unit):''}</option>`; });
   const rest = [...items.values()].filter(p => !opts.has(p.id)).sort((a,b) => (a.name||'').localeCompare(b.name||'','pt-BR'));
   if(rest.length) o += `<optgroup label="Outros produtos">` + rest.map(p => `<option value="${esc(p.id)}"${it.match===p.id?' selected':''}>${esc(p.name)}</option>`).join('') + `</optgroup>`;
-  const tot = it.kg ? (it.qty && it.p ? it.qty*it.p : it.t) : (it.qty||1)*(it.p||0);
+  const tot = rcLineTotal(it);
   return `<div class="rc-item${it.on?'':' off'}${it.check?' warn':''}" data-rc="${i}">
     <label class="rc-on"><input type="checkbox" data-rc-on="${i}"${it.on?' checked':''} aria-label="Incluir item"></label>
     <div class="rc-body">
       <input class="rc-name" id="rcName${i}" value="${esc(it.name)}" aria-label="Nome do produto" autocomplete="off">
-      ${it.desc && normP(it.desc)!==normP(it.name) ? `<small class="rc-desc">na nota: ${esc(it.desc)}</small>` : ''}
+      ${it.desc && normP(it.desc)!==normP(it.name) ? `<small class="rc-desc">na nota: ${esc(it.desc)}${it.learned ? ' · <b>reconhecido ✓</b>' : ''}</small>` : ''}
       <select class="rc-match" id="rcMatch${i}" aria-label="Produto">${o}</select>
       <div class="rc-nums">
         <select id="rcKg${i}" class="rc-kg" aria-label="Tipo"><option value="un"${it.kg?'':' selected'}>un</option><option value="kg"${it.kg?' selected':''}>kg</option></select>
         <input id="rcQ${i}" inputmode="decimal" value="${esc(it.kg ? String(it.qty).replace('.',',') : String(it.qty||1).replace('.',','))}" aria-label="Quantidade ou peso">
         <span>×</span>
         <input id="rcP${i}" inputmode="decimal" value="${esc(rcMoney(it.p))}" aria-label="Preço unitário ou do kg">
-        <span class="rc-tot mono" id="rcT${i}">= ${tot ? fmt(Math.round(tot*100)/100) : '—'}</span>
+        <span class="rc-tot mono" id="rcT${i}">= ${tot ? fmt(tot) : '—'}</span>
       </div>
       ${it.check ? '<small class="rc-warn">⚠ Os números desta linha não batem. Confira com a nota.</small>' : ''}
     </div>
@@ -1461,7 +1577,7 @@ function rcSyncFromForm(){
 }
 function rcSummary(){
   const on = rcData.items.filter(x => x.on);
-  const sum = rcData.items.reduce((s, x, i) => { if(!x.on) return s; const t = x.kg ? (x.qty && x.p ? x.qty*x.p : x.t||0) : (x.qty||1)*(x.p||0); return s + (t||0); }, 0);
+  const sum = rcData.items.reduce((s, x) => x.on ? s + (rcLineTotal(x)||0) : s, 0);
   let cmp = '';
   if(rcData.total){ const diff = Math.round((sum - rcData.total)*100)/100; cmp = Math.abs(diff) < 0.05 ? ' · <b class="ok">bate com o total da nota ✓</b>' : ` · total da nota ${fmt(rcData.total)} (diferença ${fmt(Math.abs(diff))}, confira)`; }
   const el = $('#rcSum'); if(el) el.innerHTML = `${on.length} de ${rcData.items.length} itens · soma ${fmt(Math.round(sum*100)/100)}${cmp}`;
@@ -1492,8 +1608,8 @@ function rcUpdateRow(i){
   rcSyncFromForm();
   const it = rcData.items[i], row = document.querySelector(`[data-rc="${i}"]`);
   if(row) row.classList.toggle('off', !it.on);
-  const tot = it.kg ? (it.qty && it.p ? it.qty*it.p : null) : (it.qty||1)*(it.p||0);
-  const t = $('#rcT'+i); if(t) t.textContent = '= ' + (tot ? fmt(Math.round(tot*100)/100) : '—');
+  const tot = rcLineTotal(it);
+  const t = $('#rcT'+i); if(t) t.textContent = '= ' + (tot ? fmt(tot) : '—');
   rcSummary();
 }
 function saveReceipt(){
@@ -1502,17 +1618,18 @@ function saveReceipt(){
   const bad = on.findIndex(x => !x.name || !x.p || (x.kg && !x.qty));
   if(bad >= 0){ toast('Confira o item ' + (rcData.items.indexOf(on[bad]) + 1) + ': falta nome, preço ou peso.'); const el = $('#rcName' + rcData.items.indexOf(on[bad])); if(el) el.focus(); return; }
   const d = rcData.date || today(), s = rcData.store || '';
-  const touched = new Map();
+  const touched = new Map(), learn = [];
   on.forEach(it => {
     const e = {p: Math.round(it.p*100)/100, d, s};
-    if(it.kg){ e.w = Math.round(it.qty*1000)/1000; e.t = Math.round(it.qty*it.p*100)/100; }
-    else if(it.qty && it.qty !== 1){ e.q = it.qty; e.t = Math.round(it.qty*it.p*100)/100; }
+    if(it.kg){ e.w = Math.round(it.qty*1000)/1000; e.t = rcLineTotal(it); }
+    else if(it.qty && it.qty !== 1){ e.q = it.qty; e.t = rcLineTotal(it); }
     let prod = it.match ? (touched.get(it.match) || items.get(it.match)) : null;
     if(!prod && !it.match){
       const key = 'new:' + normP(it.name);
       prod = touched.get(key);
       if(!prod){ prod = {id: newId(), name: it.name, unit: '', entries: [], updated: Date.now()}; if(it.ean) prod.ean = it.ean; if(it.kg) prod.byWeight = true; touched.set(key, prod); }
       prod.entries = [...prod.entries, e];
+      if(it.desc) learn.push([it.desc, it.name, prod.id]);
       return;
     }
     if(!prod) return;
@@ -1520,8 +1637,10 @@ function saveReceipt(){
     if(!np.ean && it.ean && ![...items.values()].some(x => x.id !== np.id && x.ean && sameCode(x.ean, it.ean))) np.ean = it.ean;
     if(it.kg && !np.byWeight && !(prod.entries||[]).length) np.byWeight = true;
     touched.set(np.id, np);
+    if(it.desc) learn.push([it.desc, np.name, np.id]);
   });
   touched.forEach(p => persist(p));
+  rcLearn(learn);
   if(s && d === today()){ setTrip(s); learnPlace(s); }
   toast(`${on.length} ${on.length===1?'compra salva':'compras salvas'}`);
   rcData = null; closeSheet();
