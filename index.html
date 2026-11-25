@@ -187,6 +187,8 @@ input::placeholder{color:var(--muted);opacity:.8}
 .rc-nums input{width:84px;padding:8px 10px;font-family:var(--f-mono)}
 .rc-nums .rc-kg{padding:8px 6px}
 .rc-tot{font-weight:700;margin-left:auto}
+.rc-dc{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.rc-dc input{width:84px;padding:6px 10px;font-family:var(--f-mono)}
 .rc-warn{color:#b07a10;font-size:12px}
 #rcSum .ok{color:var(--down)}
 .row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;cursor:pointer;min-width:0}
@@ -521,6 +523,7 @@ function openDetail(id){
       ${p.byWeight ? trioHTML('cmpPrice','Preço do kg hoje') : `<label for="cmpPrice">Preço de hoje</label>
       <div class="money"><span>R$</span><input id="cmpPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></div>`}
       <div id="cmpOut" class="cmp"></div>
+      ${dcFieldHTML('cmpDc')}
       <div class="field"><label for="cmpStore">Onde</label>
         <div class="ean-row"><input id="cmpStore" placeholder="Loja, restaurante, posto…" autocomplete="off"><button class="btn" type="button" data-near="cmpStore">📍 Perto</button></div>
         <div class="near" data-near-out="cmpStore" aria-live="polite"></div></div>
@@ -553,7 +556,7 @@ function renderDetailParts(){
     const prev = arr[idx+1];
     const d = prev ? delta(e.p, prev.p) : null;
     return `<li><button class="row-edit" type="button" data-edit-entry="${e._i}" aria-label="Editar compra de ${fdate(e.d)}"><span class="d">${fdate(e.d)}</span><span class="s">${esc(e.s||'—')}</span>
-      <span class="p">${fmtU(e.p,p)} ${d?chipFor(d):''}${p.byWeight && e.w ? `<span class="w">${fmtW(e.w)}${e.t?' = '+fmt(e.t):''}</span>` : ''}</span></button>
+      <span class="p">${fmtU(e.p,p)} ${d?chipFor(d):''}${(p.byWeight && e.w) || e.dc || (e.q && e.q!==1) ? `<span class="w">${[p.byWeight && e.w ? fmtW(e.w) : '', e.q && e.q!==1 ? String(e.q).replace('.',',')+' un' : '', e.dc ? 'desc. −'+fmt(e.dc) : '', (e.t!=null || e.dc) ? 'pago '+fmt(entryNet(e)) : ''].filter(Boolean).join(' · ')}</span>` : ''}</span></button>
       <button class="del" type="button" data-del-entry="${e._i}" aria-label="Apagar compra de ${fdate(e.d)}">×</button></li>`;
   }).join('');
   renderCmp();
@@ -586,15 +589,16 @@ function saveBuy(){
   if(p.byWeight){
     const r = readTrio('cmpPrice');
     if(!r){ $('#cmpErr').textContent = 'Preencha o preço do kg, ou o peso e o total pago.'; $('#cmpPrice').focus(); return; }
-    e = {...r, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()};
+    e = applyDc({...r, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()}, 'cmpDc');
   } else {
     const v = parsePrice($('#cmpPrice').value);
     if(v===null){ $('#cmpErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#cmpPrice').focus(); return; }
-    e = {p:v, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()};
+    e = applyDc({p:v, d:$('#cmpDate').value || today(), s:$('#cmpStore').value.trim()}, 'cmpDc');
   }
   if(e.s && e.d===today()){ setTrip(e.s); learnPlace(e.s); }
   persist({...p, entries:[...(p.entries||[]), e], updated:Date.now()});
   if(p.byWeight) clearTrio('cmpPrice'); else $('#cmpPrice').value='';
+  if($('#cmpDc')) $('#cmpDc').value='';
   $('#cmpErr').textContent='';
   renderCmp();
   toast('Compra registrada');
@@ -613,6 +617,7 @@ function openAdd(prefill, ean){
       <div class="field"><label for="fUnit">Tamanho / unidade (opcional)</label><input id="fUnit" placeholder="Ex.: 5 kg, lata 350 ml" autocomplete="off"></div>
       <label class="check"><input type="checkbox" id="fByW"> Vendido por peso <small>carne, queijo, frutas…</small></label>
       <div id="fPriceBox" style="display:flex;flex-direction:column;gap:12px">${plainPriceHTML('fPrice','Preço pago')}</div>
+      ${dcFieldHTML('fDc')}
       <div class="field"><label for="fStore">Onde</label>
         <div class="ean-row"><input id="fStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(tripStore())}"><button class="btn" type="button" data-near="fStore">📍 Perto</button></div>
         <div class="near" data-near-out="fStore" aria-live="polite"></div></div>
@@ -676,11 +681,11 @@ function submitAdd(ev){
   if(byW){
     const r = readTrio('fPrice');
     if(!r){ $('#fErr').textContent='Preencha o preço do kg, ou o peso e o total pago.'; $('#fPrice').focus(); return; }
-    e = {...r, d:$('#fDate').value || today(), s:$('#fStore').value.trim()};
+    e = applyDc({...r, d:$('#fDate').value || today(), s:$('#fStore').value.trim()}, 'fDc');
   } else {
     const v = parsePrice($('#fPrice').value);
     if(v===null){ $('#fErr').textContent='Digite o preço pago, ex.: 12,90'; $('#fPrice').focus(); return; }
-    e = {p:v, d:$('#fDate').value || today(), s:$('#fStore').value.trim()};
+    e = applyDc({p:v, d:$('#fDate').value || today(), s:$('#fStore').value.trim()}, 'fDc');
   }
   if(e.s && e.d===today()){ setTrip(e.s); learnPlace(e.s); }
   const ean = $('#fEan').value.replace(/\s/g,'');
@@ -1104,6 +1109,7 @@ function openEditEntry(i){
     <div class="sheet-head"><div><h2 id="sheetTitle">Editar compra</h2><p>${esc(p.name)}</p></div><button class="x" type="button" data-back aria-label="Voltar">×</button></div>
     <div class="slip">
       ${p.byWeight ? trioHTML('eePrice','Preço do kg', e) : `<div class="field"><label for="eePrice">Preço pago</label><div class="money"><span>R$</span><input id="eePrice" inputmode="decimal" autocomplete="off" value="${esc(priceStr(e.p))}"></div></div>`}
+      ${dcFieldHTML('eeDc', e.dc)}
       <div class="field"><label for="eeStore">Onde</label>
         <div class="ean-row"><input id="eeStore" placeholder="Loja, restaurante, posto…" autocomplete="off" value="${esc(e.s||'')}"><button class="btn" type="button" data-near="eeStore">📍 Perto</button></div>
         <div class="near" data-near-out="eeStore" aria-live="polite"></div></div>
@@ -1123,11 +1129,11 @@ function saveEditEntry(){
   if(p.byWeight){
     const r = readTrio('eePrice');
     if(!r){ $('#eeErr').textContent = 'Preencha o preço do kg, ou o peso e o total pago.'; $('#eePrice').focus(); return; }
-    ne = {...r, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()};
+    ne = applyDc({...r, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()}, 'eeDc');
   } else {
     const v = parsePrice($('#eePrice').value);
     if(v===null){ $('#eeErr').textContent = 'Digite um preço válido, ex.: 12,90'; $('#eePrice').focus(); return; }
-    ne = {p:v, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()};
+    ne = applyDc({p:v, d:$('#eeDate').value || today(), s:$('#eeStore').value.trim()}, 'eeDc');
   }
   persist({...p, entries: p.entries.map((x,k)=> k===editIdx ? ne : x), updated:Date.now()});
   toast('Compra atualizada');
@@ -1234,6 +1240,15 @@ function readTrio(key){
   return r;
 }
 function clearTrio(key){ const ids = TRIOS[key]; [ids.kg, ids.w, ids.t].forEach(id => setAuto(id, '')); ids.last = null; trioCalc(key); }
+// Desconto: guardado à parte (dc). O preço de prateleira (p) continua sendo o que se compara.
+function dcFieldHTML(id, val){ return `<div class="field"><label for="${id}">Desconto (opcional)</label><div class="money sm"><span>− R$</span><input id="${id}" inputmode="decimal" placeholder="0,00" autocomplete="off" value="${val?esc(money2(val)):''}"></div></div>`; }
+function entryGross(e){ return e.t != null ? e.t : Math.round(e.p*(e.q||1)*100)/100; }
+function entryNet(e){ return Math.round((entryGross(e) - (e.dc||0))*100)/100; }
+function applyDc(e, id){
+  const el = $('#'+id); const dc = el ? parseNum(el.value) : null;
+  if(dc){ e.dc = Math.round(dc*100)/100; if(e.t == null) e.t = Math.round(e.p*(e.q||1)*100)/100; } else delete e.dc;
+  return e;
+}
 function plainPriceHTML(id, label){ return `<div class="field"><label for="${id}">${label}</label><div class="money"><span>R$</span><input id="${id}" inputmode="decimal" placeholder="0,00" autocomplete="off"></div></div>`; }
 document.addEventListener('input', ev => { const k = ev.target.dataset && ev.target.dataset.trio; if(k && TRIOS[k]){ trioCalc(k, ev.target.id); if(k==='cmpPrice') renderCmp(); } });
 document.addEventListener('change', ev => {
@@ -1373,6 +1388,8 @@ function rcTitle(s){
 }
 function rcSplitDesc(desc){
   let d = String(desc||'').replace(/\s+/g,' ').trim();
+  // a leitura às vezes troca 0 por O e 1 por I/l no nº do item e no código
+  d = d.replace(/^([0-9OoIl]{1,3})\s+([0-9OoIl]{4,14})(?=\s)/, (m, n, c) => (/\d/.test(n) ? n.replace(/[Oo]/g,'0').replace(/[Il]/g,'1') : n) + ' ' + (/\d{3}/.test(c) ? c.replace(/[Oo]/g,'0').replace(/[Il]/g,'1') : c));
   d = d.replace(/^\d{1,3}\s+(?=\S)/, m => (/^\d{1,3}\s+\d{4,}/.test(d) ? '' : m)); // nº do item antes do código
   let code = '';
   const m = d.match(/^(\d{4,14})\s+(.*)$/);
@@ -1391,14 +1408,20 @@ function parseReceiptText(text){
   // data da emissão
   const em = text.match(/emiss[aã]o[^\d]{0,20}(\d{2})\/(\d{2})\/(\d{4})/i) || text.match(/(\d{2})\/(\d{2})\/(20\d{2})/);
   if(em) res.date = `${em[3]}-${em[2]}-${em[1]}`;
-  const tm = text.match(/valor\s*(total|a\s*pagar)[^\d]{0,15}(\d{1,6}[.,]\d{2})/i);
-  if(tm) res.total = rcNum(tm[2]);
+  // total que você pagou: "valor a pagar" (já com descontos) tem prioridade sobre "valor total"
+  const tm = text.match(/valor\s*(a\s*pagar|pago)[^\d]{0,15}(\d{1,6}[.,]\d{2})/i) || text.match(/valor\s*total[^\d]{0,15}(\d{1,6}[.,]\d{2})/i);
+  if(tm) res.total = rcNum(tm[tm.length-1]);
   // região dos itens
   let start = lines.findIndex(l => RC_HEAD.test(l));
   start = start >= 0 ? start + 1 : Math.max(0, cnpjIdx + 1);
   let pending = '';
   for(let i = start; i < lines.length; i++){
     const l = lines[i];
+    // linha de desconto do item (ex.: "Desconto -0,97", "DESC. ITEM 0,97"): vai para o último item lido
+    if(/desc(onto|\.|\b)/i.test(l) && !/descri/i.test(l) && !RC_QTY.test(l) && res.items.length){
+      const dm = l.match(/(\d{1,4}[.,]\d{2})\s*-?\s*\)?\s*$/);
+      if(dm){ const last = res.items[res.items.length-1]; last.dc = Math.round(((last.dc||0) + rcNum(dm[1]))*100)/100; pending = ''; continue; }
+    }
     if(RC_STOP.test(l)) break;
     const m = RC_QTY.exec(l);
     if(m){
@@ -1426,7 +1449,7 @@ function parseReceiptText(text){
 }
 function rcItem(desc, code, qty, unit, up, total){
   const kg = /^(KG|KGS)$/.test(unit), g = /^(G|GR)$/.test(unit);
-  const it = {desc, name: rcPretty(desc), ean: (code && validGTIN(code)) ? code : '', kg: kg || g, qty: qty || 1, unit, p: up, t: total, check:false};
+  const it = {desc, name: rcPretty(desc), ean: (code && validGTIN(code)) ? code : '', kg: kg || g, qty: qty || 1, unit, p: up, t: total, dc: 0, check:false};
   if(g){ it.qty = (qty||0)/1000; it.p = it.qty ? Math.round(total/it.qty*100)/100 : up; }
   if(it.kg) it.name = it.name.replace(/\s*\b(kg|kgs)\b\.?/gi,'').trim();
   if(it.qty && it.p && it.t && Math.abs(it.qty*it.p - it.t) > 0.02 + it.t*0.002){
@@ -1505,8 +1528,8 @@ async function rcReadWithOCR(files){
 const RC_PROMPT = `As imagens são fotos de um cupom fiscal brasileiro (NFC-e), possivelmente em partes. Transcreva TODOS os itens comprados.
 Responda só com JSON neste formato:
 {"loja":"nome fantasia ou razão social, sem LTDA/ME","data":"AAAA-MM-DD da emissão ou vazio","total":número ou null,
- "itens":[{"descricao":"texto do cupom","nome":"nome legível do produto, sem abreviações, com tamanho se houver (ex.: Leite Condensado Moça 395g)","codigo":"código de barras/EAN do item ou vazio","quantidade":número,"unidade":"UN ou KG etc.","preco_unitario":número,"total":número}]}
-Regras: números com ponto decimal; item vendido por peso tem unidade KG, quantidade = quilos e preco_unitario = preço do kg; ignore descontos, sacolas só se não tiver preço, linhas de pagamento e tributos; se um item aparecer repetido em linhas diferentes, mantenha cada linha.`;
+ "itens":[{"descricao":"texto do cupom","nome":"nome legível do produto, sem abreviações, com tamanho se houver (ex.: Leite Condensado Moça 395g)","codigo":"código de barras/EAN do item ou vazio","quantidade":número,"unidade":"UN ou KG etc.","preco_unitario":número,"total":número,"desconto":número}]}
+Regras: números com ponto decimal; item vendido por peso tem unidade KG, quantidade = quilos e preco_unitario = preço do kg; "total" do item é o valor da linha ANTES do desconto; "desconto" é o desconto aplicado àquele item (número positivo, 0 se não houver), que costuma vir numa linha logo abaixo do item; o "total" geral é o VALOR A PAGAR (já com descontos); ignore sacolas só se não tiver preço, linhas de pagamento e tributos; se um item aparecer repetido em linhas diferentes, mantenha cada linha.`;
 async function rcReadWithClaude(files){
   const sample = await window.claude.use('sample');
   if(!sample) throw {code:'not_granted'};
@@ -1521,6 +1544,7 @@ async function rcReadWithClaude(files){
     const unit = String(x.unidade || 'UN').toUpperCase();
     const it = rcItem(String(x.descricao || x.nome || ''), String(x.codigo || '').replace(/\D/g,''), n(x.quantidade) || 1, unit, n(x.preco_unitario), n(x.total));
     if(x.nome) it.name = String(x.nome).trim();
+    it.dc = n(x.desconto) || 0;
     if(!it.p && it.t && it.qty) it.p = Math.round(it.t / it.qty * 100) / 100;
     if(!it.t && it.p) it.t = Math.round(it.p * it.qty * 100) / 100;
     if(it.p) out.items.push(it);
@@ -1579,11 +1603,12 @@ function rcPrepItem(it){
   return {...it, on: true, match: c.length && c[0].s >= 0.6 ? c[0].p.id : ''};
 }
 const rcMoney = v => v == null ? '' : money2(v);
-function rcLineTotal(x){
+function rcGross(x){
   const calc = x.kg ? (x.qty && x.p ? x.qty*x.p : null) : (x.qty||1)*(x.p||0);
   if(x.t && calc != null && Math.abs(calc - x.t) < 0.03) return x.t;
   return calc != null ? Math.round(calc*100)/100 : (x.t || null);
 }
+function rcLineTotal(x){ const g = rcGross(x); return g == null ? null : Math.round((g - (x.dc||0))*100)/100; }
 function rcRowHTML(it, i){
   const cands = rcCandidates(it), opts = new Set();
   let o = `<option value="">➕ Novo produto</option>`;
@@ -1604,6 +1629,7 @@ function rcRowHTML(it, i){
         <input id="rcP${i}" inputmode="decimal" value="${esc(rcMoney(it.p))}" aria-label="Preço unitário ou do kg">
         <span class="rc-tot mono" id="rcT${i}">= ${tot ? fmt(tot) : '—'}</span>
       </div>
+      <div class="rc-dc"><label for="rcD${i}">Desconto − R$</label><input id="rcD${i}" inputmode="decimal" placeholder="0,00" value="${it.dc ? esc(rcMoney(it.dc)) : ''}" autocomplete="off"></div>
       ${it.check ? '<small class="rc-warn">⚠ Os números desta linha não batem. Confira com a nota.</small>' : ''}
     </div>
   </div>`;
@@ -1615,7 +1641,7 @@ function rcSyncFromForm(){
   rcData.items.forEach((it, i) => {
     const el = $('#rcName'+i); if(!el) return;
     it.name = el.value.trim(); it.match = $('#rcMatch'+i).value; it.kg = $('#rcKg'+i).value === 'kg';
-    it.qty = parseNum($('#rcQ'+i).value) || (it.kg ? null : 1); it.p = parseNum($('#rcP'+i).value);
+    it.qty = parseNum($('#rcQ'+i).value) || (it.kg ? null : 1); it.p = parseNum($('#rcP'+i).value); it.dc = parseNum($('#rcD'+i).value) || 0;
     it.on = $(`[data-rc-on="${i}"]`).checked;
   });
 }
@@ -1665,8 +1691,9 @@ function saveReceipt(){
   const touched = new Map(), learn = [];
   on.forEach(it => {
     const e = {p: Math.round(it.p*100)/100, d, s};
-    if(it.kg){ e.w = Math.round(it.qty*1000)/1000; e.t = rcLineTotal(it); }
-    else if(it.qty && it.qty !== 1){ e.q = it.qty; e.t = rcLineTotal(it); }
+    if(it.kg){ e.w = Math.round(it.qty*1000)/1000; e.t = rcGross(it); }
+    else if(it.qty && it.qty !== 1){ e.q = it.qty; e.t = rcGross(it); }
+    if(it.dc){ e.dc = Math.round(it.dc*100)/100; if(e.t == null) e.t = rcGross(it); }
     let prod = it.match ? (touched.get(it.match) || items.get(it.match)) : null;
     if(!prod && !it.match){
       const key = 'new:' + normP(it.name);
@@ -1696,7 +1723,7 @@ document.addEventListener('change', ev => {
   const m = t.id && t.id.match(/^rc(Kg|Match)(\d+)$/); if(m) rcUpdateRow(+m[2]);
 });
 document.addEventListener('input', ev => {
-  const m = ev.target.id && ev.target.id.match(/^rc(Q|P|Name)(\d+)$/); if(m) rcUpdateRow(+m[2]);
+  const m = ev.target.id && ev.target.id.match(/^rc(Q|P|Name|D)(\d+)$/); if(m) rcUpdateRow(+m[2]);
 });
 
 /* ---------- Folha: abrir/fechar ---------- */
