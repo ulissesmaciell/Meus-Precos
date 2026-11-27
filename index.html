@@ -128,6 +128,7 @@ input::placeholder{color:var(--muted);opacity:.8}
 .sheet{background:var(--bg);width:100%;max-width:640px;max-height:92%;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px 16px 28px;display:flex;flex-direction:column;gap:16px;animation:up .22s ease-out}
 @keyframes up{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){.sheet{animation:none}}
+.sheet > *{flex-shrink:0}
 .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .sheet-head p{margin:4px 0 0;color:var(--muted);font-size:14px}
 .x{border:0;background:var(--neutral-bg);border-radius:50%;width:36px;height:36px;font-size:20px;line-height:1;flex-shrink:0}
@@ -170,7 +171,7 @@ input::placeholder{color:var(--muted);opacity:.8}
 .check{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer}
 .check input{width:22px;height:22px;accent-color:var(--accent);flex-shrink:0;margin:0}
 .check small{font-weight:400;color:var(--muted)}
-.hist .w{display:block;font-family:var(--f-mono);font-size:12px;font-weight:400;color:var(--muted)}
+.hist .w{grid-column:1/-1;display:block;font-family:var(--f-mono);font-size:12px;font-weight:400;color:var(--muted)}
 .scan-wait-box{display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.75);padding:16px 20px;border-radius:14px;font-size:17px;max-width:86%;text-align:left}
 .spinner{width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -191,7 +192,11 @@ input::placeholder{color:var(--muted);opacity:.8}
 .rc-dc input{width:84px;padding:6px 10px;font-family:var(--f-mono)}
 .rc-warn{color:#b07a10;font-size:12px}
 #rcSum .ok{color:var(--down)}
-.row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;cursor:pointer;min-width:0}
+.hist-card{display:flex;flex-direction:column;gap:10px}
+.hist-tabs{align-self:flex-start}
+.tab-n{font-weight:500;opacity:.7}
+.hist[hidden],.spark[hidden]{display:none}
+.row-edit{all:unset;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;row-gap:2px;align-items:center;gap:10px;cursor:pointer;min-width:0}
 .row-edit:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:6px}
 h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 .head-btns{display:flex;gap:8px;align-items:center;flex-shrink:0}
@@ -200,8 +205,8 @@ h3 small{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
 .hist li{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px dashed var(--line);font-size:14px}
 .hist li:last-child{border-bottom:0}
 .hist .d{font-family:var(--f-mono);color:var(--muted);font-size:13px}
-.hist .s{color:var(--muted);overflow-wrap:anywhere}
-.hist .p{font-family:var(--f-mono);font-weight:700}
+.hist .s{color:var(--ink);font-weight:600;overflow-wrap:anywhere}
+.hist .p{font-family:var(--f-mono);font-weight:700;text-align:right;display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
 .hist .del{border:0;background:transparent;color:var(--muted);font-size:18px;width:28px;height:28px;border-radius:50%}
 .hist .del:hover{background:var(--up-bg);color:var(--up)}
 .err{color:var(--up);font-size:13px;min-height:1em;margin:0}
@@ -498,6 +503,7 @@ function sparkSVG(h){
   const pts = h.map((e,i)=>`${x(i).toFixed(1)},${y(e.p).toFixed(1)}`);
   const area = `M${x(0)},${H-bot} L${pts.join(' L')} L${x(h.length-1)},${H-bot} Z`;
   const lx = x(h.length-1), ly = y(vals[vals.length-1]);
+  const lbl = (v, yy, right) => `<text x="${right ? W-px : px}" y="${yy}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)"${right ? ' text-anchor="end"' : ''}>${fmt(v)}</text>`;
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução do preço">
     <line x1="${px}" x2="${W-px}" y1="${y(mx)}" y2="${y(mx)}" stroke="var(--line)" stroke-dasharray="3 4"/>
     <line x1="${px}" x2="${W-px}" y1="${y(mn)}" y2="${y(mn)}" stroke="var(--line)" stroke-dasharray="3 4"/>
@@ -506,8 +512,8 @@ function sparkSVG(h){
     <circle cx="${lx}" cy="${ly}" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
     <text x="${px}" y="${H-5}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)">${fdate(h[0].d)}</text>
     <text x="${W-px}" y="${H-5}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)" text-anchor="end">${fdate(h[h.length-1].d)}</text>
-    <text x="${W-px}" y="${Math.max(10,y(mx)-4)}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)" text-anchor="end">${fmt(mx)}</text>
-    ${mx!==mn?`<text x="${W-px}" y="${y(mn)+12}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)" text-anchor="end">${fmt(mn)}</text>`:''}
+    ${lbl(mx, Math.max(10,y(mx)-4), vals.indexOf(mx) < vals.length/2)}
+    ${mx!==mn ? lbl(mn, y(mn)-4, vals.indexOf(mn) < vals.length/2) : ''}
   </svg>`;
 }
 function openDetail(id){
@@ -531,9 +537,15 @@ function openDetail(id){
       <p id="cmpErr" class="err"></p>
       <button id="saveBuy" class="btn primary wide" type="button">Registrar esta compra</button>
     </section>
-    <div id="dSpark" class="spark"></div>
-    <h3>Histórico <small>· toque numa compra para editar</small></h3>
-    <ul id="dHist" class="hist"></ul>
+    <section class="hist-card" aria-label="Histórico">
+      <div class="seg hist-tabs" role="group" aria-label="Ver histórico como">
+        <button type="button" data-htab="list" aria-pressed="true">Compras <span id="dCount" class="tab-n"></span></button>
+        <button type="button" data-htab="chart" aria-pressed="false">Gráfico</button>
+      </div>
+      <ul id="dHist" class="hist"></ul>
+      <div id="dSpark" class="spark" hidden></div>
+      <p id="dHint" class="count" style="margin:0">Toque numa compra para editar ou apagar.</p>
+    </section>
     <button id="delProd" class="btn danger" type="button">Excluir produto</button>`;
   const h = hist(p), last = h[h.length-1];
   $('#cmpStore').value = tripStore() || (last && last.s) || '';
@@ -541,22 +553,31 @@ function openDetail(id){
   showSheet();
   renderDetailParts();
 }
+let histTab = (()=>{ try{ return localStorage.getItem('meusprecos.htab') || 'list'; }catch(e){ return 'list'; } })();
+function setHistTab(t){
+  histTab = t; try{ localStorage.setItem('meusprecos.htab', t); }catch(e){}
+  document.querySelectorAll('[data-htab]').forEach(b => b.setAttribute('aria-pressed', b.dataset.htab===t ? 'true' : 'false'));
+  const l = $('#dHist'), c = $('#dSpark'), hint = $('#dHint');
+  if(l) l.hidden = t !== 'list'; if(hint) hint.hidden = t !== 'list'; if(c) c.hidden = t !== 'chart';
+}
 function renderDetailParts(){
   const p = items.get(openId); if(!p) return;
   const h = hist(p), last = h[h.length-1];
   if(!h.length){ $('#dStats').innerHTML=''; $('#dSpark').innerHTML=sparkSVG(h); $('#dHist').innerHTML='<li><span class="s">Sem compras registradas.</span></li>'; renderCmp(); return; }
   const min = h.reduce((a,e)=> e.p < a.p ? e : a, h[0]);
-  const avg = h.reduce((s,e)=>s+e.p,0)/h.length;
+  const avg = Math.round(h.reduce((s,e)=>s+e.p,0)/h.length*100)/100;
   $('#dStats').innerHTML = `
     <div class="stat"><span>Último pago</span><strong>${fmtU(last.p,p)}</strong><small>${esc([fdate(last.d), last.s].filter(Boolean).join(' · '))}</small></div>
     <div class="stat"><span>Menor</span><strong>${fmtU(min.p,p)}</strong><small>${esc([fdate(min.d), min.s].filter(Boolean).join(' · '))}</small></div>
     <div class="stat"><span>Média</span><strong>${fmtU(avg,p)}</strong><small>${h.length} ${h.length===1?'compra':'compras'}</small></div>`;
   $('#dSpark').innerHTML = sparkSVG(h);
+  $('#dCount').textContent = '(' + h.length + ')';
+  setHistTab(histTab);
   $('#dHist').innerHTML = h.slice().reverse().map((e,idx,arr)=>{
     const prev = arr[idx+1];
     const d = prev ? delta(e.p, prev.p) : null;
-    return `<li><button class="row-edit" type="button" data-edit-entry="${e._i}" aria-label="Editar compra de ${fdate(e.d)}"><span class="d">${fdate(e.d)}</span><span class="s">${esc(e.s||'—')}</span>
-      <span class="p">${fmtU(e.p,p)} ${d?chipFor(d):''}${(p.byWeight && e.w) || e.dc || (e.q && e.q!==1) ? `<span class="w">${[p.byWeight && e.w ? fmtW(e.w) : '', e.q && e.q!==1 ? String(e.q).replace('.',',')+' un' : '', e.dc ? 'desc. −'+fmt(e.dc) : '', (e.t!=null || e.dc) ? 'pago '+fmt(entryNet(e)) : ''].filter(Boolean).join(' · ')}</span>` : ''}</span></button>
+    return `<li><button class="row-edit" type="button" data-edit-entry="${e._i}" aria-label="Editar compra de ${fdate(e.d)}"><span class="s">${esc(e.s||'Sem loja')}</span>
+      <span class="p">${fmtU(e.p,p)} ${d?chipFor(d):''}</span>${`<span class="w">${[fdate(e.d), p.byWeight && e.w ? fmtW(e.w) : '', e.q && e.q!==1 ? String(e.q).replace('.',',')+' un' : '', e.dc ? 'desc. −'+fmt(e.dc) : '', (e.t!=null || e.dc) ? 'pago '+fmt(entryNet(e)) : ''].filter(Boolean).join(' · ')}</span>`}</button>
       <button class="del" type="button" data-del-entry="${e._i}" aria-label="Apagar compra de ${fdate(e.d)}">×</button></li>`;
   }).join('');
   renderCmp();
@@ -1241,7 +1262,7 @@ function readTrio(key){
 }
 function clearTrio(key){ const ids = TRIOS[key]; [ids.kg, ids.w, ids.t].forEach(id => setAuto(id, '')); ids.last = null; trioCalc(key); }
 // Desconto: guardado à parte (dc). O preço de prateleira (p) continua sendo o que se compara.
-function dcFieldHTML(id, val){ return `<div class="field"><label for="${id}">Desconto (opcional)</label><div class="money sm"><span>− R$</span><input id="${id}" inputmode="decimal" placeholder="0,00" autocomplete="off" value="${val?esc(money2(val)):''}"></div></div>`; }
+function dcFieldHTML(id, val){ return `<div class="field"><label for="${id}">Desconto (opcional)</label><div class="money sm"><span>R$</span><input id="${id}" inputmode="decimal" placeholder="0,00" autocomplete="off" value="${val?esc(money2(val)):''}"></div></div>`; }
 function entryGross(e){ return e.t != null ? e.t : Math.round(e.p*(e.q||1)*100)/100; }
 function entryNet(e){ return Math.round((entryGross(e) - (e.dc||0))*100)/100; }
 function applyDc(e, id){
@@ -1746,6 +1767,7 @@ document.addEventListener('click', ev=>{
   if(t.closest('[data-receipt]')){ rcAppend = false; $('#receiptFile').click(); return; }
   if(t.closest('[data-rc-more]')){ rcSyncFromForm(); rcAppend = true; $('#receiptFile').click(); return; }
   if(t.closest('#rcSave')){ saveReceipt(); return; }
+  const ht = t.closest('[data-htab]'); if(ht){ setHistTab(ht.dataset.htab); return; }
   if(t.closest('[data-edit-prod]')){ openEditProduct(); return; }
   const ee = t.closest('[data-edit-entry]'); if(ee){ openEditEntry(+ee.dataset.editEntry); return; }
   if(t.closest('[data-back]')){ openDetail(openId); return; }
